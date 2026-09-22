@@ -4,12 +4,16 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSession } from "@/context/SessionContext";
 import { Ticket } from "@/lib/types";
+import { BulkImport } from "@/components/BulkImport";
+import { JiraSetupModal } from "@/components/JiraSetupModal";
 
 export function Sidebar() {
   const { session, viewingTicketId, isHost, setViewingTicketId, emit } = useSession();
   const [addingTicket, setAddingTicket] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newJiraUrl, setNewJiraUrl] = useState("");
+  const [bulkImportOpen, setBulkImportOpen] = useState(false);
+  const [jiraModalOpen, setJiraModalOpen] = useState(false);
 
   if (!session) return null;
 
@@ -140,6 +144,18 @@ export function Sidebar() {
               + Add Ticket
             </button>
           )}
+          <button
+            onClick={() => setBulkImportOpen(true)}
+            className="w-full rounded-lg border border-gray-200 py-2 text-xs text-muted transition-colors hover:border-primary hover:text-primary mt-2"
+          >
+            Bulk Import
+          </button>
+          <button
+            onClick={() => setJiraModalOpen(true)}
+            className="w-full rounded-lg border border-gray-200 py-2 text-xs text-muted transition-colors hover:border-primary hover:text-primary mt-2"
+          >
+            {session.jiraConnected ? "⚡ Jira Connected" : "🔗 Connect Jira"}
+          </button>
         </div>
       )}
 
@@ -155,6 +171,9 @@ export function Sidebar() {
           Copy Invite Link
         </button>
       </div>
+
+      <BulkImport open={bulkImportOpen} onClose={() => setBulkImportOpen(false)} />
+      <JiraSetupModal open={jiraModalOpen} onClose={() => setJiraModalOpen(false)} />
     </aside>
   );
 }

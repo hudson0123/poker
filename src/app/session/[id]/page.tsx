@@ -10,6 +10,7 @@ import { ParticipantList } from "@/components/ParticipantList";
 import { RevealView } from "@/components/RevealView";
 import { Timer } from "@/components/Timer";
 import { CommentsPanel } from "@/components/CommentsPanel";
+import { ExportSummary } from "@/components/ExportSummary";
 
 function SessionContent() {
   const { session, error } = useSession();
@@ -47,12 +48,15 @@ function SessionContent() {
         <RevealView />
         <div className="flex items-center justify-between">
           <Timer />
-          <button
-            onClick={() => setCommentsOpen(!commentsOpen)}
-            className="rounded-lg border border-gray-200 px-4 py-1.5 text-sm text-muted hover:border-primary hover:text-primary transition-colors"
-          >
-            💬 Comments
-          </button>
+          <div className="flex items-center gap-2">
+            <ExportSummary />
+            <button
+              onClick={() => setCommentsOpen(!commentsOpen)}
+              className="rounded-lg border border-gray-200 px-4 py-1.5 text-sm text-muted hover:border-primary hover:text-primary transition-colors"
+            >
+              💬 Comments
+            </button>
+          </div>
         </div>
         <ParticipantList />
       </main>

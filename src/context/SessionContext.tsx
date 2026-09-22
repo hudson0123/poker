@@ -9,6 +9,7 @@ interface SessionState {
   viewingTicketId: string | null;
   timerEndsAt: string | null;
   error: string | null;
+  jiraError: string | null;
 }
 
 type SessionAction =
@@ -30,7 +31,8 @@ type SessionAction =
   | { type: "TIMER_STARTED"; endsAt: string }
   | { type: "TIMER_STOPPED" }
   | { type: "JIRA_CONFIGURED"; connected: boolean }
-  | { type: "JIRA_CONTEXT_LOADED"; ticketId: string; description: string; comments: JiraComment[] };
+  | { type: "JIRA_CONTEXT_LOADED"; ticketId: string; description: string; comments: JiraComment[] }
+  | { type: "SET_JIRA_ERROR"; message: string };
 
 function sessionReducer(state: SessionState, action: SessionAction): SessionState {
   const { session } = state;
@@ -180,7 +182,11 @@ function sessionReducer(state: SessionState, action: SessionAction): SessionStat
 
     case "JIRA_CONFIGURED":
       if (!session) return state;
-      return { ...state, session: { ...session, jiraConnected: action.connected } };
+      return {
+        ...state,
+        session: { ...session, jiraConnected: action.connected },
+        jiraError: action.connected ? null : state.jiraError,
+      };
 
     case "JIRA_CONTEXT_LOADED":
       if (!session) return state;
@@ -196,6 +202,9 @@ function sessionReducer(state: SessionState, action: SessionAction): SessionStat
         },
       };
 
+    case "SET_JIRA_ERROR":
+      return { ...state, jiraError: action.message };
+
     default:
       return state;
   }
@@ -210,6 +219,7 @@ interface SessionContextValue {
   timerEndsAt: string | null;
   revealedStats: Record<string, VoteStats>;
   error: string | null;
+  jiraError: string | null;
   setViewingTicketId: (id: string) => void;
   emit: (event: string, payload?: unknown) => void;
 }
@@ -229,6 +239,7 @@ export function SessionProvider({ sessionId, participantName, isSpectator, child
     viewingTicketId: null,
     timerEndsAt: null,
     error: null,
+    jiraError: null,
   });
   const [participantId] = useState(() => getParticipantId());
   const revealedStatsRef = useRef<Record<string, VoteStats>>({});
@@ -281,6 +292,8 @@ export function SessionProvider({ sessionId, participantName, isSpectator, child
     const onJiraContextLoaded = (data: { ticketId: string; description: string; comments: JiraComment[] }) =>
       dispatch({ type: "JIRA_CONTEXT_LOADED", ...data });
     const onError = (data: { message: string }) => dispatch({ type: "SET_ERROR", message: data.message });
+    const onJiraError = (data: { ticketId?: string; message: string }) =>
+      dispatch({ type: "SET_JIRA_ERROR", message: data.message });
     const join = () => {
       socket.emit("join-session", { sessionId, participantName, participantId, isSpectator });
     };
@@ -303,6 +316,7 @@ export function SessionProvider({ sessionId, participantName, isSpectator, child
     socket.on("jira-configured", onJiraConfigured);
     socket.on("jira-context-loaded", onJiraContextLoaded);
     socket.on("error", onError);
+    socket.on("jira-error", onJiraError);
     socket.on("connect", join);
 
     if (socket.connected) {
@@ -330,6 +344,7 @@ export function SessionProvider({ sessionId, participantName, isSpectator, child
       socket.off("jira-configured", onJiraConfigured);
       socket.off("jira-context-loaded", onJiraContextLoaded);
       socket.off("error", onError);
+      socket.off("jira-error", onJiraError);
       socket.off("connect", join);
     };
   }, [sessionId, participantName, participantId, isSpectator]);
@@ -356,6 +371,7 @@ export function SessionProvider({ sessionId, participantName, isSpectator, child
         timerEndsAt: state.timerEndsAt,
         revealedStats,
         error: state.error,
+        jiraError: state.jiraError,
         setViewingTicketId,
         emit,
       }}

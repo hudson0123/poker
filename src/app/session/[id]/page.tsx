@@ -6,6 +6,8 @@ import { getSocket, getParticipantId } from "@/lib/socket";
 import { SessionProvider } from "@/context/SessionContext";
 import { Sidebar } from "@/components/Sidebar";
 import { TicketHeader } from "@/components/TicketHeader";
+import { VotingArea } from "@/components/VotingArea";
+import { ParticipantList } from "@/components/ParticipantList";
 
 function SessionContent() {
   return (
@@ -13,9 +15,8 @@ function SessionContent() {
       <Sidebar />
       <main className="flex flex-1 flex-col gap-4 overflow-y-auto p-6">
         <TicketHeader />
-        <div className="rounded-xl bg-surface p-6 shadow-sm text-center text-muted">
-          Voting area (coming next)
-        </div>
+        <VotingArea />
+        <ParticipantList />
       </main>
     </div>
   );

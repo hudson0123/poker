@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { SessionProvider, useSession } from "@/context/SessionContext";
 import { Sidebar } from "@/components/Sidebar";
@@ -11,10 +11,34 @@ import { RevealView } from "@/components/RevealView";
 import { Timer } from "@/components/Timer";
 import { CommentsPanel } from "@/components/CommentsPanel";
 import { ExportSummary } from "@/components/ExportSummary";
+import { POINT_VALUES } from "@/lib/types";
 
 function SessionContent() {
-  const { session, error } = useSession();
+  const { session, error, currentTicket, amSpectator, castVote, isReconnecting } = useSession();
   const [commentsOpen, setCommentsOpen] = useState(false);
+
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+
+      if (e.key === "Escape") {
+        setCommentsOpen(false);
+        return;
+      }
+
+      const digit = Number(e.key);
+      if (!Number.isInteger(digit) || digit < 1 || digit > 9) return;
+      if (!currentTicket || currentTicket.status !== "voting" || amSpectator) return;
+
+      const closest = POINT_VALUES.reduce((best, value) =>
+        Math.abs(value - digit) < Math.abs(best - digit) ? value : best
+      );
+      castVote(closest);
+    };
+
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [currentTicket, amSpectator, castVote]);
 
   if (error) {
     return (
@@ -43,6 +67,11 @@ function SessionContent() {
     <div className="flex h-screen">
       <Sidebar />
       <main className="flex flex-1 flex-col gap-4 overflow-y-auto p-6">
+        {isReconnecting && (
+          <div className="rounded-lg bg-accent/10 px-4 py-2 text-center text-sm font-medium text-accent">
+            Reconnecting...
+          </div>
+        )}
         <TicketHeader />
         <VotingArea />
         <RevealView />

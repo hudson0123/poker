@@ -25,6 +25,9 @@ export function ParticipantList() {
   return (
     <div className="rounded-xl bg-surface p-4 shadow-sm">
       <h3 className="mb-3 text-sm font-semibold text-muted uppercase tracking-wide">Participants</h3>
+      {voters.length === 0 ? (
+        <p className="text-sm text-muted">No participants yet</p>
+      ) : (
       <div className="flex flex-wrap gap-3">
         <AnimatePresence>
           {voters.map((p) => {
@@ -68,6 +71,7 @@ export function ParticipantList() {
           })}
         </AnimatePresence>
       </div>
+      )}
 
       {spectators.length > 0 && (
         <div className="mt-3 border-t border-gray-100 pt-3">

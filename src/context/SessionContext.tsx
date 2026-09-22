@@ -220,6 +220,10 @@ interface SessionContextValue {
   revealedStats: Record<string, VoteStats>;
   error: string | null;
   jiraError: string | null;
+  isReconnecting: boolean;
+  myVote: VoteValue | undefined;
+  amSpectator: boolean;
+  castVote: (value: VoteValue) => void;
   setViewingTicketId: (id: string) => void;
   emit: (event: string, payload?: unknown) => void;
 }
@@ -245,6 +249,14 @@ export function SessionProvider({ sessionId, participantName, isSpectator, child
   const revealedStatsRef = useRef<Record<string, VoteStats>>({});
   const [revealedStats, setRevealedStats] = useState<Record<string, VoteStats>>({});
 
+  // The server never sends real vote values back to clients until a ticket is
+  // revealed (see SessionStore.serializeSession) — so the local voter is the
+  // only source of truth for their own selection while voting is in progress.
+  // This lives here (rather than in VotingArea) so both VotingArea's cards and
+  // the page-level keyboard shortcuts read/write the same selection.
+  const [myLocalVote, setMyLocalVote] = useState<VoteValue | undefined>(undefined);
+  const [isReconnecting, setIsReconnecting] = useState(false);
+
   useEffect(() => {
     const socket = getSocket();
 
@@ -259,7 +271,15 @@ export function SessionProvider({ sessionId, participantName, isSpectator, child
     // socket is a shared module-level singleton, so a blanket
     // removeAllListeners() on unmount would silently destroy listeners
     // any other mounted consumer of the socket may have registered.
-    const onSessionState = (session: Session) => dispatch({ type: "SET_SESSION", session });
+    const onSessionState = (session: Session) => {
+      setIsReconnecting(false);
+      dispatch({ type: "SET_SESSION", session });
+    };
+    // Socket.io's "connect" event (see `join` below) already re-emits
+    // join-session on reconnect using the real participantName — this just
+    // surfaces a non-blocking UI signal for the gap between disconnect and
+    // the next session-state sync.
+    const onDisconnect = () => setIsReconnecting(true);
     const onParticipantJoined = (participant: Participant) => dispatch({ type: "PARTICIPANT_JOINED", participant });
     const onParticipantLeft = ({ participantId }: { participantId: string }) =>
       dispatch({ type: "PARTICIPANT_LEFT", participantId });
@@ -299,6 +319,7 @@ export function SessionProvider({ sessionId, participantName, isSpectator, child
     };
 
     socket.on("session-state", onSessionState);
+    socket.on("disconnect", onDisconnect);
     socket.on("participant-joined", onParticipantJoined);
     socket.on("participant-left", onParticipantLeft);
     socket.on("vote-updated", onVoteUpdated);
@@ -327,6 +348,7 @@ export function SessionProvider({ sessionId, participantName, isSpectator, child
 
     return () => {
       socket.off("session-state", onSessionState);
+      socket.off("disconnect", onDisconnect);
       socket.off("participant-joined", onParticipantJoined);
       socket.off("participant-left", onParticipantLeft);
       socket.off("vote-updated", onVoteUpdated);
@@ -359,6 +381,27 @@ export function SessionProvider({ sessionId, participantName, isSpectator, child
 
   const isHost = state.session?.hostId === participantId;
   const currentTicket = state.session?.tickets.find((t) => t.id === state.viewingTicketId) ?? null;
+  const amSpectator = state.session?.participants.find((p) => p.id === participantId)?.isSpectator ?? false;
+  const isRevealed = currentTicket?.status === "revealed";
+  const myVote: VoteValue | undefined = isRevealed && currentTicket ? currentTicket.votes[participantId] : myLocalVote;
+
+  useEffect(() => {
+    setMyLocalVote(undefined);
+  }, [currentTicket?.id, currentTicket?.round]);
+
+  const castVote = useCallback(
+    (value: VoteValue) => {
+      if (!currentTicket || currentTicket.status !== "voting" || amSpectator) return;
+      if (myVote === value) {
+        setMyLocalVote(undefined);
+        emit("clear-vote", { ticketId: currentTicket.id });
+      } else {
+        setMyLocalVote(value);
+        emit("submit-vote", { ticketId: currentTicket.id, points: value });
+      }
+    },
+    [currentTicket, myVote, amSpectator, emit]
+  );
 
   return (
     <SessionContext.Provider
@@ -372,6 +415,10 @@ export function SessionProvider({ sessionId, participantName, isSpectator, child
         revealedStats,
         error: state.error,
         jiraError: state.jiraError,
+        isReconnecting,
+        myVote,
+        amSpectator,
+        castVote,
         setViewingTicketId,
         emit,
       }}

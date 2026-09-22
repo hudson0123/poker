@@ -125,8 +125,15 @@ export function registerSocketHandlers(io: SocketIOServer, store: SessionStore):
 
     socket.on("remove-ticket", (payload: { ticketId: string }) => {
       if (!requireHost()) return;
+      const wasActive = store.getSession(data.sessionId)?.activeTicketId === payload.ticketId;
       if (store.removeTicket(data.sessionId, payload.ticketId)) {
         io.to(data.sessionId).emit("ticket-removed", { ticketId: payload.ticketId });
+        if (wasActive) {
+          const newActiveTicketId = store.getSession(data.sessionId)?.activeTicketId ?? null;
+          if (newActiveTicketId) {
+            io.to(data.sessionId).emit("active-ticket-changed", { ticketId: newActiveTicketId });
+          }
+        }
       }
     });
 

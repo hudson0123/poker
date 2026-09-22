@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { SessionProvider, useSession } from "@/context/SessionContext";
 import { Sidebar } from "@/components/Sidebar";
@@ -7,9 +8,12 @@ import { TicketHeader } from "@/components/TicketHeader";
 import { VotingArea } from "@/components/VotingArea";
 import { ParticipantList } from "@/components/ParticipantList";
 import { RevealView } from "@/components/RevealView";
+import { Timer } from "@/components/Timer";
+import { CommentsPanel } from "@/components/CommentsPanel";
 
 function SessionContent() {
   const { session, error } = useSession();
+  const [commentsOpen, setCommentsOpen] = useState(false);
 
   if (error) {
     return (
@@ -41,8 +45,18 @@ function SessionContent() {
         <TicketHeader />
         <VotingArea />
         <RevealView />
+        <div className="flex items-center justify-between">
+          <Timer />
+          <button
+            onClick={() => setCommentsOpen(!commentsOpen)}
+            className="rounded-lg border border-gray-200 px-4 py-1.5 text-sm text-muted hover:border-primary hover:text-primary transition-colors"
+          >
+            💬 Comments
+          </button>
+        </div>
         <ParticipantList />
       </main>
+      <CommentsPanel open={commentsOpen} onClose={() => setCommentsOpen(false)} />
     </div>
   );
 }

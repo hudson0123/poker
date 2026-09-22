@@ -41,6 +41,7 @@ function sessionReducer(state: SessionState, action: SessionAction): SessionStat
         ...state,
         session: action.session,
         viewingTicketId: state.viewingTicketId ?? action.session.activeTicketId,
+        error: null,
       };
 
     case "SET_ERROR":
@@ -241,69 +242,69 @@ export function SessionProvider({ sessionId, participantName, isSpectator, child
     // component joined first and waited for that event before mounting this
     // provider, this provider's own listener would register too late and
     // permanently miss the only session-state event it will ever receive.
-    socket.on("session-state", (session: Session) => {
-      dispatch({ type: "SET_SESSION", session });
-    });
-    socket.on("participant-joined", (participant: Participant) => {
-      dispatch({ type: "PARTICIPANT_JOINED", participant });
-    });
-    socket.on("participant-left", ({ participantId }: { participantId: string }) => {
+    //
+    // Handlers are named (not inline) and cleaned up individually via
+    // socket.off(event, handler) rather than removeAllListeners() — the
+    // socket is a shared module-level singleton, so a blanket
+    // removeAllListeners() on unmount would silently destroy listeners
+    // any other mounted consumer of the socket may have registered.
+    const onSessionState = (session: Session) => dispatch({ type: "SET_SESSION", session });
+    const onParticipantJoined = (participant: Participant) => dispatch({ type: "PARTICIPANT_JOINED", participant });
+    const onParticipantLeft = ({ participantId }: { participantId: string }) =>
       dispatch({ type: "PARTICIPANT_LEFT", participantId });
-    });
-    socket.on("vote-updated", (data: { ticketId: string; participantId: string; hasVoted: boolean }) => {
+    const onVoteUpdated = (data: { ticketId: string; participantId: string; hasVoted: boolean }) =>
       dispatch({ type: "VOTE_UPDATED", ...data });
-    });
-    socket.on("votes-revealed", (data: { ticketId: string; votes: Record<string, VoteValue>; stats: VoteStats }) => {
+    const onVotesRevealed = (data: { ticketId: string; votes: Record<string, VoteValue>; stats: VoteStats }) => {
       revealedStatsRef.current = { ...revealedStatsRef.current, [data.ticketId]: data.stats };
       setRevealedStats({ ...revealedStatsRef.current });
       dispatch({ type: "VOTES_REVEALED", ticketId: data.ticketId, votes: data.votes, stats: data.stats });
-    });
-    socket.on("ticket-added", (ticket: Ticket) => {
-      dispatch({ type: "TICKET_ADDED", ticket });
-    });
-    socket.on("tickets-added", (tickets: Ticket[]) => {
-      dispatch({ type: "TICKETS_ADDED", tickets });
-    });
-    socket.on("ticket-removed", ({ ticketId }: { ticketId: string }) => {
-      dispatch({ type: "TICKET_REMOVED", ticketId });
-    });
-    socket.on("ticket-updated", (ticket: Ticket) => {
-      dispatch({ type: "TICKET_UPDATED", ticket });
-    });
-    socket.on("tickets-reordered", ({ ticketIds }: { ticketIds: string[] }) => {
+    };
+    const onTicketAdded = (ticket: Ticket) => dispatch({ type: "TICKET_ADDED", ticket });
+    const onTicketsAdded = (tickets: Ticket[]) => dispatch({ type: "TICKETS_ADDED", tickets });
+    const onTicketRemoved = ({ ticketId }: { ticketId: string }) => dispatch({ type: "TICKET_REMOVED", ticketId });
+    const onTicketUpdated = (ticket: Ticket) => dispatch({ type: "TICKET_UPDATED", ticket });
+    const onTicketsReordered = ({ ticketIds }: { ticketIds: string[] }) =>
       dispatch({ type: "TICKETS_REORDERED", ticketIds });
-    });
-    socket.on("voting-reset", (data: { ticketId: string; round: number }) => {
+    const onVotingReset = (data: { ticketId: string; round: number }) => {
       delete revealedStatsRef.current[data.ticketId];
       setRevealedStats({ ...revealedStatsRef.current });
       dispatch({ type: "VOTING_RESET", ...data });
-    });
-    socket.on("comment-added", (data: { ticketId: string; comment: Comment }) => {
+    };
+    const onCommentAdded = (data: { ticketId: string; comment: Comment }) =>
       dispatch({ type: "COMMENT_ADDED", ...data });
-    });
-    socket.on("active-ticket-changed", ({ ticketId }: { ticketId: string }) => {
+    const onActiveTicketChanged = ({ ticketId }: { ticketId: string }) =>
       dispatch({ type: "ACTIVE_TICKET_CHANGED", ticketId });
-    });
-    socket.on("timer-started", ({ endsAt }: { endsAt: string }) => {
-      dispatch({ type: "TIMER_STARTED", endsAt });
-    });
-    socket.on("timer-stopped", () => {
-      dispatch({ type: "TIMER_STOPPED" });
-    });
-    socket.on("jira-configured", ({ connected }: { connected: boolean }) => {
+    const onTimerStarted = ({ endsAt }: { endsAt: string }) => dispatch({ type: "TIMER_STARTED", endsAt });
+    const onTimerStopped = () => dispatch({ type: "TIMER_STOPPED" });
+    const onJiraConfigured = ({ connected }: { connected: boolean }) =>
       dispatch({ type: "JIRA_CONFIGURED", connected });
-    });
-    socket.on("jira-context-loaded", (data: { ticketId: string; description: string; comments: JiraComment[] }) => {
+    const onJiraContextLoaded = (data: { ticketId: string; description: string; comments: JiraComment[] }) =>
       dispatch({ type: "JIRA_CONTEXT_LOADED", ...data });
-    });
-    socket.on("error", (data: { message: string }) => {
-      dispatch({ type: "SET_ERROR", message: data.message });
-    });
-
+    const onError = (data: { message: string }) => dispatch({ type: "SET_ERROR", message: data.message });
     const join = () => {
       socket.emit("join-session", { sessionId, participantName, participantId, isSpectator });
     };
+
+    socket.on("session-state", onSessionState);
+    socket.on("participant-joined", onParticipantJoined);
+    socket.on("participant-left", onParticipantLeft);
+    socket.on("vote-updated", onVoteUpdated);
+    socket.on("votes-revealed", onVotesRevealed);
+    socket.on("ticket-added", onTicketAdded);
+    socket.on("tickets-added", onTicketsAdded);
+    socket.on("ticket-removed", onTicketRemoved);
+    socket.on("ticket-updated", onTicketUpdated);
+    socket.on("tickets-reordered", onTicketsReordered);
+    socket.on("voting-reset", onVotingReset);
+    socket.on("comment-added", onCommentAdded);
+    socket.on("active-ticket-changed", onActiveTicketChanged);
+    socket.on("timer-started", onTimerStarted);
+    socket.on("timer-stopped", onTimerStopped);
+    socket.on("jira-configured", onJiraConfigured);
+    socket.on("jira-context-loaded", onJiraContextLoaded);
+    socket.on("error", onError);
     socket.on("connect", join);
+
     if (socket.connected) {
       join();
     } else {
@@ -311,7 +312,25 @@ export function SessionProvider({ sessionId, participantName, isSpectator, child
     }
 
     return () => {
-      socket.removeAllListeners();
+      socket.off("session-state", onSessionState);
+      socket.off("participant-joined", onParticipantJoined);
+      socket.off("participant-left", onParticipantLeft);
+      socket.off("vote-updated", onVoteUpdated);
+      socket.off("votes-revealed", onVotesRevealed);
+      socket.off("ticket-added", onTicketAdded);
+      socket.off("tickets-added", onTicketsAdded);
+      socket.off("ticket-removed", onTicketRemoved);
+      socket.off("ticket-updated", onTicketUpdated);
+      socket.off("tickets-reordered", onTicketsReordered);
+      socket.off("voting-reset", onVotingReset);
+      socket.off("comment-added", onCommentAdded);
+      socket.off("active-ticket-changed", onActiveTicketChanged);
+      socket.off("timer-started", onTimerStarted);
+      socket.off("timer-stopped", onTimerStopped);
+      socket.off("jira-configured", onJiraConfigured);
+      socket.off("jira-context-loaded", onJiraContextLoaded);
+      socket.off("error", onError);
+      socket.off("connect", join);
     };
   }, [sessionId, participantName, participantId, isSpectator]);
 

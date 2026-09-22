@@ -8,6 +8,7 @@ import { Sidebar } from "@/components/Sidebar";
 import { TicketHeader } from "@/components/TicketHeader";
 import { VotingArea } from "@/components/VotingArea";
 import { ParticipantList } from "@/components/ParticipantList";
+import { RevealView } from "@/components/RevealView";
 
 function SessionContent() {
   return (
@@ -16,6 +17,7 @@ function SessionContent() {
       <main className="flex flex-1 flex-col gap-4 overflow-y-auto p-6">
         <TicketHeader />
         <VotingArea />
+        <RevealView />
         <ParticipantList />
       </main>
     </div>

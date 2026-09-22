@@ -96,6 +96,31 @@ describe("SessionStore", () => {
     });
   });
 
+  describe("startVoting", () => {
+    it("leaves a fresh ticket's round and votes untouched", () => {
+      const session = store.createSession("Sprint 42", "host-id", "Alice");
+      const ticket = store.addTicket(session.id, "TICKET-1")!;
+      const started = store.startVoting(session.id, ticket.id);
+      expect(started?.status).toBe("voting");
+      expect(started?.round).toBe(1);
+      expect(started?.votes.size).toBe(0);
+    });
+
+    it("clears stale votes and increments round when restarting a revealed ticket", () => {
+      const session = store.createSession("Sprint 42", "host-id", "Alice");
+      store.joinSession(session.id, "user-1", "Bob", "socket-1", false);
+      const ticket = store.addTicket(session.id, "TICKET-1")!;
+      store.startVoting(session.id, ticket.id);
+      store.submitVote(session.id, "user-1", ticket.id, 5);
+      store.revealVotes(session.id, ticket.id);
+
+      const restarted = store.startVoting(session.id, ticket.id);
+      expect(restarted?.status).toBe("voting");
+      expect(restarted?.round).toBe(2);
+      expect(restarted?.votes.size).toBe(0);
+    });
+  });
+
   describe("revealVotes", () => {
     it("returns votes with stats and changes status to revealed", () => {
       const session = store.createSession("Sprint 42", "host-id", "Alice");
@@ -163,22 +188,6 @@ describe("SessionStore", () => {
       expect(session.tickets).toHaveLength(1);
       store.removeTicket(session.id, ticket.id);
       expect(session.tickets).toHaveLength(0);
-    });
-
-    it("edits a ticket", () => {
-      const session = store.createSession("Sprint 42", "host-id", "Alice");
-      const ticket = store.addTicket(session.id, "TICKET-1")!;
-      const edited = store.editTicket(session.id, ticket.id, { title: "Updated" });
-      expect(edited?.title).toBe("Updated");
-    });
-
-    it("reorders tickets", () => {
-      const session = store.createSession("Sprint 42", "host-id", "Alice");
-      const t1 = store.addTicket(session.id, "First")!;
-      const t2 = store.addTicket(session.id, "Second")!;
-      const t3 = store.addTicket(session.id, "Third")!;
-      store.reorderTickets(session.id, [t3.id, t1.id, t2.id]);
-      expect(session.tickets.map((t) => t.title)).toEqual(["Third", "First", "Second"]);
     });
 
     it("bulk adds tickets", () => {

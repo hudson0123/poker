@@ -16,6 +16,7 @@ export function CommentsPanel() {
 
   const hasJiraContext = currentTicket?.jiraDescription || (currentTicket?.jiraComments && currentTicket.jiraComments.length > 0);
   const showJiraTab = session?.jiraConnected && currentTicket?.jiraKey;
+  const tab = showJiraTab ? activeTab : "session";
 
   return (
     <div className="flex flex-1 min-h-[16rem] flex-col rounded-xl bg-surface shadow-sm">
@@ -47,7 +48,7 @@ export function CommentsPanel() {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {activeTab === "session" && (
+        {tab === "session" && (
           <>
             {!currentTicket && <p className="text-sm text-muted">Select a ticket to see comments</p>}
             {currentTicket && currentTicket.comments.length === 0 && (
@@ -67,7 +68,7 @@ export function CommentsPanel() {
           </>
         )}
 
-        {activeTab === "jira" && (
+        {tab === "jira" && (
           <>
             {currentTicket?.jiraDescription && (
               <div className="rounded-lg bg-background p-3">
@@ -92,7 +93,7 @@ export function CommentsPanel() {
       </div>
 
       {/* Input — session tab only */}
-      {activeTab === "session" && currentTicket && (
+      {tab === "session" && currentTicket && (
         <div className="border-t border-gray-200 p-4">
           <div className="flex gap-2">
             <input

@@ -54,13 +54,21 @@ export function Sidebar() {
       <div className="flex-1 overflow-y-auto p-2">
         <AnimatePresence>
           {session.tickets.map((ticket, index) => (
-            <motion.button
+            <motion.div
               key={ticket.id}
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, x: -20 }}
+              role="button"
+              tabIndex={0}
               onClick={() => setViewingTicketId(ticket.id)}
-              className={`group mb-1 flex w-full items-start gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setViewingTicketId(ticket.id);
+                }
+              }}
+              className={`group mb-1 flex w-full cursor-pointer items-start gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
                 viewingTicketId === ticket.id
                   ? "bg-primary/10 text-primary"
                   : "text-secondary hover:bg-gray-50"
@@ -91,7 +99,7 @@ export function Sidebar() {
                   &times;
                 </button>
               )}
-            </motion.button>
+            </motion.div>
           ))}
         </AnimatePresence>
 

@@ -1,7 +1,7 @@
 import { Server as SocketIOServer, Socket } from "socket.io";
 import { SessionStore } from "./SessionStore";
 import { fetchJiraIssue, validateJiraCredentials } from "./jiraClient";
-import { VoteValue } from "@/lib/types";
+import { ALL_VOTE_VALUES, VoteValue } from "@/lib/types";
 
 interface SocketData {
   sessionId: string;
@@ -61,6 +61,10 @@ export function registerSocketHandlers(io: SocketIOServer, store: SessionStore):
 
     socket.on("submit-vote", (payload: { ticketId: string; points: VoteValue }) => {
       if (!data.sessionId) return;
+      if (!ALL_VOTE_VALUES.includes(payload.points)) return;
+      const session = store.getSession(data.sessionId);
+      const participant = session?.participants.get(data.participantId);
+      if (!participant || participant.isSpectator) return;
       const ok = store.submitVote(data.sessionId, data.participantId, payload.ticketId, payload.points);
       if (ok) {
         io.to(data.sessionId).emit("vote-updated", {
@@ -137,29 +141,6 @@ export function registerSocketHandlers(io: SocketIOServer, store: SessionStore):
       }
     });
 
-    socket.on("edit-ticket", (payload: { ticketId: string; title?: string; jiraUrl?: string }) => {
-      if (!requireHost()) return;
-      const ticket = store.editTicket(data.sessionId, payload.ticketId, {
-        title: payload.title,
-        jiraUrl: payload.jiraUrl,
-      });
-      if (ticket) {
-        const serialized = store.serializeSession(store.getSession(data.sessionId)!);
-        const clientTicket = serialized.tickets.find((t) => t.id === ticket.id);
-        io.to(data.sessionId).emit("ticket-updated", clientTicket);
-        if (payload.jiraUrl) {
-          fetchJiraContextIfNeeded(data.sessionId, ticket.id, ticket.jiraKey);
-        }
-      }
-    });
-
-    socket.on("reorder-tickets", (payload: { ticketIds: string[] }) => {
-      if (!requireHost()) return;
-      if (store.reorderTickets(data.sessionId, payload.ticketIds)) {
-        io.to(data.sessionId).emit("tickets-reordered", { ticketIds: payload.ticketIds });
-      }
-    });
-
     socket.on("start-voting", (payload: { ticketId: string }) => {
       if (!requireHost()) return;
       const ticket = store.startVoting(data.sessionId, payload.ticketId);
@@ -188,13 +169,6 @@ export function registerSocketHandlers(io: SocketIOServer, store: SessionStore):
       const ticket = store.resetVoting(data.sessionId, payload.ticketId);
       if (ticket) {
         io.to(data.sessionId).emit("voting-reset", { ticketId: payload.ticketId, round: ticket.round });
-      }
-    });
-
-    socket.on("set-active-ticket", (payload: { ticketId: string }) => {
-      if (!requireHost()) return;
-      if (store.setActiveTicket(data.sessionId, payload.ticketId)) {
-        io.to(data.sessionId).emit("active-ticket-changed", { ticketId: payload.ticketId });
       }
     });
 

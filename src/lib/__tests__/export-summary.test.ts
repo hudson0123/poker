@@ -6,7 +6,6 @@ describe("generateExportMarkdown", () => {
     const session: Session = {
       id: "test",
       name: "Sprint 42",
-      hostId: "host",
       createdAt: new Date().toISOString(),
       activeTicketId: null,
       jiraConnected: false,

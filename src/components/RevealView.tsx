@@ -1,16 +1,19 @@
 "use client";
 
+import { useMemo } from "react";
 import { motion } from "framer-motion";
 import { useSession } from "@/context/SessionContext";
+import { computeVoteStats } from "@/lib/vote-stats";
 import { Confetti } from "./Confetti";
 
 export function RevealView() {
-  const { currentTicket, session, revealedStats } = useSession();
+  const { currentTicket, session } = useSession();
+  const stats = useMemo(
+    () => computeVoteStats(currentTicket?.votes ?? {}),
+    [currentTicket]
+  );
 
   if (!currentTicket || currentTicket.status !== "revealed") return null;
-
-  const stats = revealedStats[currentTicket.id];
-  if (!stats) return null;
 
   const voters = session?.participants.filter((p) => !p.isSpectator) ?? [];
 

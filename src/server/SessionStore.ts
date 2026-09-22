@@ -187,32 +187,13 @@ export class SessionStore {
     return true;
   }
 
-  editTicket(sessionId: string, ticketId: string, updates: { title?: string; jiraUrl?: string }): ServerTicket | null {
-    const ticket = this.findTicket(sessionId, ticketId);
-    if (!ticket) return null;
-    if (updates.title !== undefined) ticket.title = updates.title;
-    if (updates.jiraUrl !== undefined) {
-      ticket.jiraUrl = updates.jiraUrl;
-      ticket.jiraKey = parseJiraKey(updates.jiraUrl) ?? undefined;
-    }
-    this.touch(sessionId);
-    return ticket;
-  }
-
-  reorderTickets(sessionId: string, ticketIds: string[]): boolean {
-    const session = this.sessions.get(sessionId);
-    if (!session) return false;
-    const ticketMap = new Map(session.tickets.map((t) => [t.id, t]));
-    const reordered = ticketIds.map((id) => ticketMap.get(id)).filter((t): t is ServerTicket => !!t);
-    if (reordered.length !== session.tickets.length) return false;
-    session.tickets = reordered;
-    this.touch(sessionId);
-    return true;
-  }
-
   startVoting(sessionId: string, ticketId: string): ServerTicket | null {
     const ticket = this.findTicket(sessionId, ticketId);
     if (!ticket) return null;
+    if (ticket.status === "revealed") {
+      ticket.votes.clear();
+      ticket.round += 1;
+    }
     ticket.status = "voting";
     const session = this.sessions.get(sessionId)!;
     session.activeTicketId = ticketId;
@@ -238,15 +219,6 @@ export class SessionStore {
     ticket.round += 1;
     this.touch(sessionId);
     return ticket;
-  }
-
-  setActiveTicket(sessionId: string, ticketId: string): boolean {
-    const session = this.sessions.get(sessionId);
-    if (!session) return false;
-    if (!session.tickets.some((t) => t.id === ticketId)) return false;
-    session.activeTicketId = ticketId;
-    this.touch(sessionId);
-    return true;
   }
 
   addComment(sessionId: string, ticketId: string, participantName: string, text: string): Comment | null {
@@ -289,7 +261,6 @@ export class SessionStore {
     return {
       id: session.id,
       name: session.name,
-      hostId: session.hostId,
       createdAt: session.createdAt.toISOString(),
       activeTicketId: session.activeTicketId,
       jiraConnected: !!session.jiraConfig,

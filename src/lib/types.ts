@@ -8,7 +8,6 @@ export const ALL_VOTE_VALUES: readonly VoteValue[] = [...POINT_VALUES, ...SPECIA
 export interface Session {
   id: string;
   name: string;
-  hostId: string;
   createdAt: string;
   tickets: Ticket[];
   activeTicketId: string | null;

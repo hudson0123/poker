@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useCallback, useContext, useEffect, useReducer, useRef, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useReducer, useState } from "react";
 import { getParticipantId, getSocket } from "@/lib/socket";
 import { Comment, JiraComment, Participant, Session, Ticket, VoteStats, VoteValue } from "@/lib/types";
 
@@ -23,7 +23,6 @@ type SessionAction =
   | { type: "TICKETS_ADDED"; tickets: Ticket[] }
   | { type: "TICKET_REMOVED"; ticketId: string }
   | { type: "TICKET_UPDATED"; ticket: Ticket }
-  | { type: "TICKETS_REORDERED"; ticketIds: string[] }
   | { type: "VOTING_RESET"; ticketId: string; round: number }
   | { type: "COMMENT_ADDED"; ticketId: string; comment: Comment }
   | { type: "ACTIVE_TICKET_CHANGED"; ticketId: string }
@@ -128,18 +127,6 @@ function sessionReducer(state: SessionState, action: SessionAction): SessionStat
         },
       };
 
-    case "TICKETS_REORDERED":
-      if (!session) return state;
-      return {
-        ...state,
-        session: {
-          ...session,
-          tickets: action.ticketIds
-            .map((id) => session.tickets.find((t) => t.id === id))
-            .filter((t): t is Ticket => !!t),
-        },
-      };
-
     case "VOTING_RESET":
       if (!session) return state;
       return {
@@ -217,7 +204,6 @@ interface SessionContextValue {
   myParticipantId: string;
   isHost: boolean;
   timerEndsAt: string | null;
-  revealedStats: Record<string, VoteStats>;
   error: string | null;
   jiraError: string | null;
   isReconnecting: boolean;
@@ -246,8 +232,6 @@ export function SessionProvider({ sessionId, participantName, isSpectator, child
     jiraError: null,
   });
   const [participantId] = useState(() => getParticipantId());
-  const revealedStatsRef = useRef<Record<string, VoteStats>>({});
-  const [revealedStats, setRevealedStats] = useState<Record<string, VoteStats>>({});
 
   // The server never sends real vote values back to clients until a ticket is
   // revealed (see SessionStore.serializeSession) — so the local voter is the
@@ -286,19 +270,13 @@ export function SessionProvider({ sessionId, participantName, isSpectator, child
     const onVoteUpdated = (data: { ticketId: string; participantId: string; hasVoted: boolean }) =>
       dispatch({ type: "VOTE_UPDATED", ...data });
     const onVotesRevealed = (data: { ticketId: string; votes: Record<string, VoteValue>; stats: VoteStats }) => {
-      revealedStatsRef.current = { ...revealedStatsRef.current, [data.ticketId]: data.stats };
-      setRevealedStats({ ...revealedStatsRef.current });
       dispatch({ type: "VOTES_REVEALED", ticketId: data.ticketId, votes: data.votes, stats: data.stats });
     };
     const onTicketAdded = (ticket: Ticket) => dispatch({ type: "TICKET_ADDED", ticket });
     const onTicketsAdded = (tickets: Ticket[]) => dispatch({ type: "TICKETS_ADDED", tickets });
     const onTicketRemoved = ({ ticketId }: { ticketId: string }) => dispatch({ type: "TICKET_REMOVED", ticketId });
     const onTicketUpdated = (ticket: Ticket) => dispatch({ type: "TICKET_UPDATED", ticket });
-    const onTicketsReordered = ({ ticketIds }: { ticketIds: string[] }) =>
-      dispatch({ type: "TICKETS_REORDERED", ticketIds });
     const onVotingReset = (data: { ticketId: string; round: number }) => {
-      delete revealedStatsRef.current[data.ticketId];
-      setRevealedStats({ ...revealedStatsRef.current });
       dispatch({ type: "VOTING_RESET", ...data });
     };
     const onCommentAdded = (data: { ticketId: string; comment: Comment }) =>
@@ -328,7 +306,6 @@ export function SessionProvider({ sessionId, participantName, isSpectator, child
     socket.on("tickets-added", onTicketsAdded);
     socket.on("ticket-removed", onTicketRemoved);
     socket.on("ticket-updated", onTicketUpdated);
-    socket.on("tickets-reordered", onTicketsReordered);
     socket.on("voting-reset", onVotingReset);
     socket.on("comment-added", onCommentAdded);
     socket.on("active-ticket-changed", onActiveTicketChanged);
@@ -357,7 +334,6 @@ export function SessionProvider({ sessionId, participantName, isSpectator, child
       socket.off("tickets-added", onTicketsAdded);
       socket.off("ticket-removed", onTicketRemoved);
       socket.off("ticket-updated", onTicketUpdated);
-      socket.off("tickets-reordered", onTicketsReordered);
       socket.off("voting-reset", onVotingReset);
       socket.off("comment-added", onCommentAdded);
       socket.off("active-ticket-changed", onActiveTicketChanged);
@@ -379,7 +355,7 @@ export function SessionProvider({ sessionId, participantName, isSpectator, child
     getSocket().emit(event, payload);
   }, []);
 
-  const isHost = state.session?.hostId === participantId;
+  const isHost = state.session?.participants.find((p) => p.id === participantId)?.isHost ?? false;
   const currentTicket = state.session?.tickets.find((t) => t.id === state.viewingTicketId) ?? null;
   const amSpectator = state.session?.participants.find((p) => p.id === participantId)?.isSpectator ?? false;
   const isRevealed = currentTicket?.status === "revealed";
@@ -412,7 +388,6 @@ export function SessionProvider({ sessionId, participantName, isSpectator, child
         myParticipantId: participantId,
         isHost,
         timerEndsAt: state.timerEndsAt,
-        revealedStats,
         error: state.error,
         jiraError: state.jiraError,
         isReconnecting,

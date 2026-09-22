@@ -13,7 +13,6 @@ export function ParticipantList() {
 
   const hasVoted = (participantId: string): boolean | null => {
     if (!currentTicket || currentTicket.status === "waiting") return null;
-    if (currentTicket.status === "revealed") return participantId in currentTicket.votes;
     return participantId in currentTicket.votes;
   };
 

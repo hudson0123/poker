@@ -8,10 +8,12 @@ interface SessionState {
   session: Session | null;
   viewingTicketId: string | null;
   timerEndsAt: string | null;
+  error: string | null;
 }
 
 type SessionAction =
   | { type: "SET_SESSION"; session: Session }
+  | { type: "SET_ERROR"; message: string }
   | { type: "PARTICIPANT_JOINED"; participant: Participant }
   | { type: "PARTICIPANT_LEFT"; participantId: string }
   | { type: "VOTE_UPDATED"; ticketId: string; participantId: string; hasVoted: boolean }
@@ -40,6 +42,9 @@ function sessionReducer(state: SessionState, action: SessionAction): SessionStat
         session: action.session,
         viewingTicketId: state.viewingTicketId ?? action.session.activeTicketId,
       };
+
+    case "SET_ERROR":
+      return { ...state, error: action.message };
 
     case "PARTICIPANT_JOINED":
       if (!session) return state;
@@ -203,17 +208,26 @@ interface SessionContextValue {
   isHost: boolean;
   timerEndsAt: string | null;
   revealedStats: Record<string, VoteStats>;
+  error: string | null;
   setViewingTicketId: (id: string) => void;
   emit: (event: string, payload?: unknown) => void;
 }
 
 const SessionContext = createContext<SessionContextValue | null>(null);
 
-export function SessionProvider({ children }: { children: React.ReactNode }) {
+interface SessionProviderProps {
+  sessionId: string;
+  participantName: string;
+  isSpectator: boolean;
+  children: React.ReactNode;
+}
+
+export function SessionProvider({ sessionId, participantName, isSpectator, children }: SessionProviderProps) {
   const [state, dispatch] = useReducer(sessionReducer, {
     session: null,
     viewingTicketId: null,
     timerEndsAt: null,
+    error: null,
   });
   const [participantId] = useState(() => getParticipantId());
   const revealedStatsRef = useRef<Record<string, VoteStats>>({});
@@ -222,6 +236,11 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const socket = getSocket();
 
+    // All listeners — including "session-state", the one-time initial sync —
+    // must be registered before join-session is emitted. If a separate
+    // component joined first and waited for that event before mounting this
+    // provider, this provider's own listener would register too late and
+    // permanently miss the only session-state event it will ever receive.
     socket.on("session-state", (session: Session) => {
       dispatch({ type: "SET_SESSION", session });
     });
@@ -277,11 +296,24 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     socket.on("jira-context-loaded", (data: { ticketId: string; description: string; comments: JiraComment[] }) => {
       dispatch({ type: "JIRA_CONTEXT_LOADED", ...data });
     });
+    socket.on("error", (data: { message: string }) => {
+      dispatch({ type: "SET_ERROR", message: data.message });
+    });
+
+    const join = () => {
+      socket.emit("join-session", { sessionId, participantName, participantId, isSpectator });
+    };
+    socket.on("connect", join);
+    if (socket.connected) {
+      join();
+    } else {
+      socket.connect();
+    }
 
     return () => {
       socket.removeAllListeners();
     };
-  }, []);
+  }, [sessionId, participantName, participantId, isSpectator]);
 
   const setViewingTicketId = useCallback((ticketId: string) => {
     dispatch({ type: "SET_VIEWING_TICKET", ticketId });
@@ -304,6 +336,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         isHost,
         timerEndsAt: state.timerEndsAt,
         revealedStats,
+        error: state.error,
         setViewingTicketId,
         emit,
       }}

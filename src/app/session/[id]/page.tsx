@@ -1,9 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
-import { getSocket, getParticipantId } from "@/lib/socket";
-import { SessionProvider } from "@/context/SessionContext";
+import { SessionProvider, useSession } from "@/context/SessionContext";
 import { Sidebar } from "@/components/Sidebar";
 import { TicketHeader } from "@/components/TicketHeader";
 import { VotingArea } from "@/components/VotingArea";
@@ -11,6 +9,31 @@ import { ParticipantList } from "@/components/ParticipantList";
 import { RevealView } from "@/components/RevealView";
 
 function SessionContent() {
+  const { session, error } = useSession();
+
+  if (error) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="rounded-2xl bg-surface p-8 shadow-md text-center">
+          <h2 className="text-xl font-semibold text-secondary">Oops!</h2>
+          <p className="mt-2 text-muted">{error}</p>
+          <a href="/" className="mt-4 inline-block text-primary hover:underline">Back to Home</a>
+        </div>
+      </div>
+    );
+  }
+
+  if (!session) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="text-center">
+          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          <p className="mt-4 text-muted">Connecting to session...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen">
       <Sidebar />
@@ -28,76 +51,11 @@ export default function SessionPage() {
   const params = useParams();
   const searchParams = useSearchParams();
   const sessionId = params.id as string;
-  const [connected, setConnected] = useState(false);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    const socket = getSocket();
-    const participantId = getParticipantId();
-    const name = searchParams.get("name");
-    const isSpectator = searchParams.get("spectator") === "1";
-
-    if (!socket.connected) {
-      socket.connect();
-    }
-
-    socket.on("connect", () => {
-      socket.emit("join-session", {
-        sessionId,
-        participantName: name || "Anonymous",
-        participantId,
-        isSpectator,
-      });
-    });
-
-    socket.on("session-state", () => {
-      setConnected(true);
-    });
-
-    socket.on("error", (data: { message: string }) => {
-      setError(data.message);
-    });
-
-    if (socket.connected) {
-      socket.emit("join-session", {
-        sessionId,
-        participantName: name || "Anonymous",
-        participantId,
-        isSpectator,
-      });
-    }
-
-    return () => {
-      socket.off("connect");
-      socket.off("error");
-    };
-  }, [sessionId, searchParams]);
-
-  if (error) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="rounded-2xl bg-surface p-8 shadow-md text-center">
-          <h2 className="text-xl font-semibold text-secondary">Oops!</h2>
-          <p className="mt-2 text-muted">{error}</p>
-          <a href="/" className="mt-4 inline-block text-primary hover:underline">Back to Home</a>
-        </div>
-      </div>
-    );
-  }
-
-  if (!connected) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-center">
-          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-          <p className="mt-4 text-muted">Connecting to session...</p>
-        </div>
-      </div>
-    );
-  }
+  const name = searchParams.get("name") || "Anonymous";
+  const isSpectator = searchParams.get("spectator") === "1";
 
   return (
-    <SessionProvider>
+    <SessionProvider sessionId={sessionId} participantName={name} isSpectator={isSpectator}>
       <SessionContent />
     </SessionProvider>
   );

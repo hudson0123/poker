@@ -38,7 +38,9 @@ export function Sidebar() {
       <div className="flex items-center justify-between border-b border-gray-200 p-4">
         <div>
           <h2 className="font-semibold text-secondary">{session.name}</h2>
-          <p className="text-xs text-muted">{session.participants.length} participant(s)</p>
+          <p className="text-xs text-muted">
+            {session.participants.filter((p) => p.isConnected).length} participant(s)
+          </p>
         </div>
         {isHost && session.jiraConnected && (
           <span className="rounded-full bg-success/10 px-2 py-0.5 text-xs font-medium text-success">Jira</span>

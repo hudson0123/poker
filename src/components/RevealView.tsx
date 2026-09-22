@@ -60,28 +60,6 @@ export function RevealView() {
           })}
         </div>
       </div>
-
-      {/* Statistics */}
-      <div className="rounded-xl bg-surface p-4 shadow-sm">
-        <div className="grid grid-cols-4 gap-4 text-center">
-          <div>
-            <p className="text-2xl font-bold text-primary">{stats.average.toFixed(1)}</p>
-            <p className="text-xs text-muted">Average</p>
-          </div>
-          <div>
-            <p className="text-2xl font-bold text-primary">{stats.median}</p>
-            <p className="text-xs text-muted">Median</p>
-          </div>
-          <div>
-            <p className="text-2xl font-bold text-secondary">{stats.low}</p>
-            <p className="text-xs text-muted">Low</p>
-          </div>
-          <div>
-            <p className="text-2xl font-bold text-secondary">{stats.high}</p>
-            <p className="text-xs text-muted">High</p>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

@@ -8,8 +8,8 @@ export function ParticipantList() {
 
   if (!session) return null;
 
-  const voters = session.participants.filter((p) => !p.isSpectator);
-  const spectators = session.participants.filter((p) => p.isSpectator);
+  const voters = session.participants.filter((p) => !p.isSpectator && p.isConnected);
+  const spectators = session.participants.filter((p) => p.isSpectator && p.isConnected);
 
   const hasVoted = (participantId: string): boolean | null => {
     if (!currentTicket || currentTicket.status === "waiting") return null;
@@ -60,7 +60,7 @@ export function ParticipantList() {
                     {voted === true ? "✓" : voted === false ? "⏳" : "—"}
                   </span>
                 )}
-                <span className={`text-sm ${p.isConnected ? "text-secondary" : "text-muted line-through"}`}>
+                <span className="text-sm text-secondary">
                   {p.name}
                   {p.isHost && <span className="ml-1 text-xs text-primary">(host)</span>}
                 </span>

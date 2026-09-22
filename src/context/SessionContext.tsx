@@ -26,6 +26,7 @@ type SessionAction =
   | { type: "VOTING_RESET"; ticketId: string; round: number }
   | { type: "COMMENT_ADDED"; ticketId: string; comment: Comment }
   | { type: "ACTIVE_TICKET_CHANGED"; ticketId: string }
+  | { type: "HOST_VIEWING_CHANGED"; ticketId: string }
   | { type: "SET_VIEWING_TICKET"; ticketId: string }
   | { type: "TIMER_STARTED"; endsAt: string }
   | { type: "TIMER_STOPPED" }
@@ -155,7 +156,15 @@ function sessionReducer(state: SessionState, action: SessionAction): SessionStat
       if (!session) return state;
       return {
         ...state,
-        session: { ...session, activeTicketId: action.ticketId },
+        session: { ...session, activeTicketId: action.ticketId, hostViewingTicketId: action.ticketId },
+        viewingTicketId: action.ticketId,
+      };
+
+    case "HOST_VIEWING_CHANGED":
+      if (!session) return state;
+      return {
+        ...state,
+        session: { ...session, hostViewingTicketId: action.ticketId },
       };
 
     case "SET_VIEWING_TICKET":
@@ -283,6 +292,8 @@ export function SessionProvider({ sessionId, participantName, isSpectator, child
       dispatch({ type: "COMMENT_ADDED", ...data });
     const onActiveTicketChanged = ({ ticketId }: { ticketId: string }) =>
       dispatch({ type: "ACTIVE_TICKET_CHANGED", ticketId });
+    const onHostViewingChanged = ({ ticketId }: { ticketId: string }) =>
+      dispatch({ type: "HOST_VIEWING_CHANGED", ticketId });
     const onTimerStarted = ({ endsAt }: { endsAt: string }) => dispatch({ type: "TIMER_STARTED", endsAt });
     const onTimerStopped = () => dispatch({ type: "TIMER_STOPPED" });
     const onJiraConfigured = ({ connected }: { connected: boolean }) =>
@@ -309,6 +320,7 @@ export function SessionProvider({ sessionId, participantName, isSpectator, child
     socket.on("voting-reset", onVotingReset);
     socket.on("comment-added", onCommentAdded);
     socket.on("active-ticket-changed", onActiveTicketChanged);
+    socket.on("host-viewing-changed", onHostViewingChanged);
     socket.on("timer-started", onTimerStarted);
     socket.on("timer-stopped", onTimerStopped);
     socket.on("jira-configured", onJiraConfigured);
@@ -337,6 +349,7 @@ export function SessionProvider({ sessionId, participantName, isSpectator, child
       socket.off("voting-reset", onVotingReset);
       socket.off("comment-added", onCommentAdded);
       socket.off("active-ticket-changed", onActiveTicketChanged);
+      socket.off("host-viewing-changed", onHostViewingChanged);
       socket.off("timer-started", onTimerStarted);
       socket.off("timer-stopped", onTimerStopped);
       socket.off("jira-configured", onJiraConfigured);

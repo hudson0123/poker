@@ -11,6 +11,7 @@ export interface Session {
   createdAt: string;
   tickets: Ticket[];
   activeTicketId: string | null;
+  hostViewingTicketId: string | null;
   participants: Participant[];
   jiraConnected: boolean;
 }
@@ -67,8 +68,8 @@ export interface JiraConfig {
 export function parseJiraKey(input: string): string | null {
   const urlMatch = input.match(/\/browse\/([A-Z][A-Z0-9]+-\d+)/);
   if (urlMatch) return urlMatch[1];
-  const bareMatch = input.match(/^([A-Z][A-Z0-9]+-\d+)$/);
-  if (bareMatch) return bareMatch[1];
+  const keyMatch = input.match(/^([A-Z][A-Z0-9]+-\d+)(?:\s|$)/);
+  if (keyMatch) return keyMatch[1];
   return null;
 }
 

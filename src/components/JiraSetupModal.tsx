@@ -11,7 +11,6 @@ interface JiraSetupModalProps {
 
 export function JiraSetupModal({ open, onClose }: JiraSetupModalProps) {
   const { emit, session, jiraError } = useSession();
-  const [baseUrl, setBaseUrl] = useState("");
   const [email, setEmail] = useState("");
   const [apiToken, setApiToken] = useState("");
   const [loading, setLoading] = useState(false);
@@ -21,9 +20,9 @@ export function JiraSetupModal({ open, onClose }: JiraSetupModalProps) {
   }, [jiraError]);
 
   const handleSubmit = () => {
-    if (!baseUrl.trim() || !email.trim() || !apiToken.trim()) return;
+    if (!email.trim() || !apiToken.trim()) return;
     setLoading(true);
-    emit("configure-jira", { baseUrl: baseUrl.trim(), email: email.trim(), apiToken: apiToken.trim() });
+    emit("configure-jira", { baseUrl: "talkiatry.atlassian.net", email: email.trim(), apiToken: apiToken.trim() });
     setTimeout(() => setLoading(false), 3000);
   };
 
@@ -53,7 +52,8 @@ export function JiraSetupModal({ open, onClose }: JiraSetupModalProps) {
             ) : (
               <>
                 <p className="text-sm text-muted">
-                  Connect Jira to fetch ticket descriptions and comments automatically.{" "}
+                  Enter your Atlassian credentials to fetch ticket descriptions and comments from{" "}
+                  <span className="font-medium text-secondary">talkiatry.atlassian.net</span>.{" "}
                   <a
                     href="https://id.atlassian.com/manage-profile/security/api-tokens"
                     target="_blank"
@@ -64,13 +64,6 @@ export function JiraSetupModal({ open, onClose }: JiraSetupModalProps) {
                   </a>
                 </p>
 
-                <input
-                  type="text"
-                  placeholder="Jira base URL (e.g. talkiatry.atlassian.net)"
-                  value={baseUrl}
-                  onChange={(e) => setBaseUrl(e.target.value)}
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-secondary placeholder:text-muted focus:border-primary focus:outline-none"
-                />
                 <input
                   type="email"
                   placeholder="Your email"
@@ -100,7 +93,7 @@ export function JiraSetupModal({ open, onClose }: JiraSetupModalProps) {
               {!session?.jiraConnected && (
                 <button
                   onClick={handleSubmit}
-                  disabled={loading || !baseUrl.trim() || !email.trim() || !apiToken.trim()}
+                  disabled={loading || !email.trim() || !apiToken.trim()}
                   className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-50 hover:bg-primary-dark"
                 >
                   {loading ? "Connecting..." : "Connect"}

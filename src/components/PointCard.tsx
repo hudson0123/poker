@@ -26,7 +26,7 @@ export function PointCard({ value, selected, disabled, onClick }: PointCardProps
           : { scale: 1, boxShadow: "0 1px 3px rgba(0,0,0,0.1)" }
       }
       transition={{ duration: 0.2 }}
-      className={`relative flex h-24 w-16 items-center justify-center rounded-xl border-2 text-xl font-bold transition-colors ${
+      className={`relative flex h-16 w-12 items-center justify-center rounded-xl border-2 text-base font-bold transition-colors ${
         selected
           ? "border-primary bg-primary/5 text-primary"
           : disabled

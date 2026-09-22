@@ -11,7 +11,6 @@ export function Sidebar() {
   const { session, viewingTicketId, isHost, setViewingTicketId, emit } = useSession();
   const [addingTicket, setAddingTicket] = useState(false);
   const [newTitle, setNewTitle] = useState("");
-  const [newJiraUrl, setNewJiraUrl] = useState("");
   const [bulkImportOpen, setBulkImportOpen] = useState(false);
   const [jiraModalOpen, setJiraModalOpen] = useState(false);
 
@@ -19,9 +18,8 @@ export function Sidebar() {
 
   const handleAddTicket = () => {
     if (!newTitle.trim()) return;
-    emit("add-ticket", { title: newTitle.trim(), jiraUrl: newJiraUrl.trim() || undefined });
+    emit("add-ticket", { title: newTitle.trim() });
     setNewTitle("");
-    setNewJiraUrl("");
     setAddingTicket(false);
   };
 
@@ -61,11 +59,15 @@ export function Sidebar() {
               exit={{ opacity: 0, x: -20 }}
               role="button"
               tabIndex={0}
-              onClick={() => setViewingTicketId(ticket.id)}
+              onClick={() => {
+                setViewingTicketId(ticket.id);
+                if (isHost) emit("set-host-viewing", { ticketId: ticket.id });
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
                   setViewingTicketId(ticket.id);
+                  if (isHost) emit("set-host-viewing", { ticketId: ticket.id });
                 }
               }}
               className={`group mb-1 flex w-full cursor-pointer items-start gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
@@ -78,8 +80,7 @@ export function Sidebar() {
                 <span className={`mt-1.5 h-2 w-2 flex-shrink-0 rounded-full ${statusColor(ticket)}`} />
                 <span className="truncate">
                   <span className="text-muted mr-1">{index + 1}.</span>
-                  {ticket.jiraKey && <span className="font-medium">{ticket.jiraKey}: </span>}
-                  {ticket.title}
+                  {ticket.jiraKey ? ticket.jiraKey : ticket.title}
                 </span>
               </span>
               {ticket.status === "revealed" && ticket.round > 1 && (
@@ -87,8 +88,11 @@ export function Sidebar() {
                   R{ticket.round}
                 </span>
               )}
-              {session.activeTicketId === ticket.id && viewingTicketId !== ticket.id && (
-                <span className="flex-shrink-0 text-xs text-primary font-medium">LIVE</span>
+              {ticket.status === "voting" && (
+                <span className="flex-shrink-0 text-[10px] font-semibold text-white bg-primary px-1.5 py-0.5 rounded">LIVE</span>
+              )}
+              {ticket.status !== "voting" && session.hostViewingTicketId === ticket.id && (
+                <span className="flex-shrink-0 text-[10px] font-semibold text-primary bg-primary/10 px-1.5 py-0.5 rounded">HOST</span>
               )}
               {isHost && (
                 <button
@@ -114,19 +118,11 @@ export function Sidebar() {
             <div className="space-y-2">
               <input
                 type="text"
-                placeholder="Ticket title or JIRA-123"
+                placeholder="TA2-1234 or ticket title"
                 value={newTitle}
                 onChange={(e) => setNewTitle(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleAddTicket()}
                 autoFocus
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-secondary placeholder:text-muted focus:border-primary focus:outline-none"
-              />
-              <input
-                type="text"
-                placeholder="Jira URL (optional)"
-                value={newJiraUrl}
-                onChange={(e) => setNewJiraUrl(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleAddTicket()}
                 className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-secondary placeholder:text-muted focus:border-primary focus:outline-none"
               />
               <div className="flex gap-2">
@@ -137,7 +133,7 @@ export function Sidebar() {
                   Add
                 </button>
                 <button
-                  onClick={() => { setAddingTicket(false); setNewTitle(""); setNewJiraUrl(""); }}
+                  onClick={() => { setAddingTicket(false); setNewTitle(""); }}
                   className="flex-1 rounded-lg border border-gray-200 py-1.5 text-sm text-muted hover:bg-gray-50"
                 >
                   Cancel
@@ -158,12 +154,23 @@ export function Sidebar() {
           >
             Bulk Import
           </button>
-          <button
-            onClick={() => setJiraModalOpen(true)}
-            className="w-full rounded-lg border border-gray-200 py-2 text-xs text-muted transition-colors hover:border-primary hover:text-primary mt-2"
-          >
-            {session.jiraConnected ? "⚡ Jira Connected" : "🔗 Connect Jira"}
-          </button>
+          <div className="flex gap-2 mt-2">
+            <button
+              onClick={() => setJiraModalOpen(true)}
+              className="flex-1 rounded-lg border border-gray-200 py-2 text-xs text-muted transition-colors hover:border-primary hover:text-primary"
+            >
+              {session.jiraConnected ? "⚡ Jira Connected" : "🔗 Connect Jira"}
+            </button>
+            {session.jiraConnected && (
+              <button
+                onClick={() => emit("sync-refine-tickets")}
+                title="Sync tickets labeled 'refine' from Jira backlog"
+                className="rounded-lg border border-gray-200 px-2.5 py-2 text-xs text-muted transition-colors hover:border-primary hover:text-primary"
+              >
+                ↻
+              </button>
+            )}
+          </div>
         </div>
       )}
 

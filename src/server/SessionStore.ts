@@ -27,8 +27,10 @@ export interface ServerSession {
   createdAt: Date;
   tickets: ServerTicket[];
   activeTicketId: string | null;
+  hostViewingTicketId: string | null;
   participants: Map<string, ServerParticipant>;
   jiraConfig?: JiraConfig;
+  jiraStoryPointsField?: string;
   lastActivity: Date;
 }
 
@@ -46,6 +48,7 @@ export class SessionStore {
       createdAt: new Date(),
       tickets: [],
       activeTicketId: null,
+      hostViewingTicketId: null,
       participants: new Map([
         [
           hostParticipantId,
@@ -148,16 +151,18 @@ export class SessionStore {
     return true;
   }
 
-  addTicket(sessionId: string, title: string, jiraUrl?: string): ServerTicket | null {
+  addTicket(sessionId: string, title: string): ServerTicket | null {
     const session = this.sessions.get(sessionId);
     if (!session) return null;
 
-    const jiraKey = jiraUrl ? parseJiraKey(jiraUrl) : parseJiraKey(title);
+    const jiraKey = parseJiraKey(title) ?? undefined;
+    const jiraUrl = jiraKey ? `https://talkiatry.atlassian.net/browse/${jiraKey}` : undefined;
+    const cleanTitle = jiraKey ? title.replace(jiraKey, "").trim() : title;
     const ticket: ServerTicket = {
       id: nanoid(),
-      title,
-      jiraKey: jiraKey ?? undefined,
-      jiraUrl: jiraUrl ?? undefined,
+      title: cleanTitle,
+      jiraKey,
+      jiraUrl,
       status: "waiting",
       votes: new Map(),
       comments: [],
@@ -168,9 +173,9 @@ export class SessionStore {
     return ticket;
   }
 
-  addTicketsBulk(sessionId: string, tickets: { title: string; jiraUrl?: string }[]): ServerTicket[] {
+  addTicketsBulk(sessionId: string, tickets: { title: string }[]): ServerTicket[] {
     return tickets
-      .map((t) => this.addTicket(sessionId, t.title, t.jiraUrl))
+      .map((t) => this.addTicket(sessionId, t.title))
       .filter((t): t is ServerTicket => t !== null);
   }
 
@@ -197,8 +202,28 @@ export class SessionStore {
     ticket.status = "voting";
     const session = this.sessions.get(sessionId)!;
     session.activeTicketId = ticketId;
+    session.hostViewingTicketId = ticketId;
     this.touch(sessionId);
     return ticket;
+  }
+
+  setActiveTicket(sessionId: string, ticketId: string): boolean {
+    const session = this.sessions.get(sessionId);
+    if (!session) return false;
+    if (!session.tickets.some((t) => t.id === ticketId)) return false;
+    session.activeTicketId = ticketId;
+    session.hostViewingTicketId = ticketId;
+    this.touch(sessionId);
+    return true;
+  }
+
+  setHostViewingTicket(sessionId: string, ticketId: string): boolean {
+    const session = this.sessions.get(sessionId);
+    if (!session) return false;
+    if (!session.tickets.some((t) => t.id === ticketId)) return false;
+    session.hostViewingTicketId = ticketId;
+    this.touch(sessionId);
+    return true;
   }
 
   revealVotes(sessionId: string, ticketId: string): { ticket: ServerTicket; stats: VoteStats } | null {
@@ -244,9 +269,10 @@ export class SessionStore {
     return this.sessions.get(sessionId)?.jiraConfig;
   }
 
-  setJiraContext(sessionId: string, ticketId: string, description: string, comments: JiraComment[]): ServerTicket | null {
+  setJiraContext(sessionId: string, ticketId: string, summary: string, description: string, comments: JiraComment[]): ServerTicket | null {
     const ticket = this.findTicket(sessionId, ticketId);
     if (!ticket) return null;
+    if (summary) ticket.title = summary;
     ticket.jiraDescription = description;
     ticket.jiraComments = comments;
     return ticket;
@@ -263,6 +289,7 @@ export class SessionStore {
       name: session.name,
       createdAt: session.createdAt.toISOString(),
       activeTicketId: session.activeTicketId,
+      hostViewingTicketId: session.hostViewingTicketId,
       jiraConnected: !!session.jiraConfig,
       participants: Array.from(session.participants.values()).map(this.toClientParticipant),
       tickets: session.tickets.map((t) => this.serializeTicket(t)),

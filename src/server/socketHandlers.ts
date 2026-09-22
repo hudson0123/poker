@@ -1,6 +1,6 @@
 import { Server as SocketIOServer, Socket } from "socket.io";
 import { SessionStore } from "./SessionStore";
-import { fetchJiraIssue, validateJiraCredentials } from "./jiraClient";
+import { fetchJiraIssue, validateJiraCredentials, assignStoryPoints, getStoryPointsFieldId, fetchRefineTickets } from "./jiraClient";
 import { ALL_VOTE_VALUES, VoteValue } from "@/lib/types";
 
 interface SocketData {
@@ -9,6 +9,55 @@ interface SocketData {
 }
 
 export function registerSocketHandlers(io: SocketIOServer, store: SessionStore): void {
+  async function fetchJiraContextIfNeeded(sessionId: string, ticketId: string, jiraKey?: string) {
+    if (!jiraKey) return;
+    const config = store.getJiraConfig(sessionId);
+    if (!config) return;
+    try {
+      const { summary, description, comments } = await fetchJiraIssue(config, jiraKey);
+      store.setJiraContext(sessionId, ticketId, summary, description, comments);
+      const session = store.getSession(sessionId);
+      const serialized = session ? store.serializeSession(session) : null;
+      const clientTicket = serialized?.tickets.find((t) => t.id === ticketId);
+      if (clientTicket) io.to(sessionId).emit("ticket-updated", clientTicket);
+      io.to(sessionId).emit("jira-context-loaded", { ticketId, description, comments });
+    } catch (err) {
+      io.to(sessionId).emit("jira-error", {
+        ticketId,
+        message: `Failed to fetch Jira issue ${jiraKey}: ${(err as Error).message}`,
+      });
+    }
+  }
+
+  async function importRefineTickets(sessionId: string) {
+    const session = store.getSession(sessionId);
+    const config = store.getJiraConfig(sessionId);
+    console.log(`[refine] importRefineTickets: session=${!!session} config=${!!config}`);
+    if (!session || !config) return;
+    try {
+      const refineTickets = await fetchRefineTickets(config);
+      console.log(`[refine] fetched ${refineTickets.length} refine tickets:`, refineTickets.map((t) => t.key));
+      const existingKeys = new Set(session.tickets.map((t) => t.jiraKey).filter(Boolean));
+      console.log(`[refine] existing keys:`, [...existingKeys]);
+      const newTickets = refineTickets
+        .filter((t) => !existingKeys.has(t.key))
+        .map((t) => ({ title: `${t.key} ${t.summary}` }));
+      console.log(`[refine] new tickets to add: ${newTickets.length}`);
+      if (newTickets.length === 0) return;
+      const added = store.addTicketsBulk(sessionId, newTickets);
+      if (added.length > 0) {
+        const serialized = store.serializeSession(store.getSession(sessionId)!);
+        const clientTickets = serialized.tickets.filter((t) => added.some((a) => a.id === t.id));
+        io.to(sessionId).emit("tickets-added", clientTickets);
+        for (const ticket of added) {
+          fetchJiraContextIfNeeded(sessionId, ticket.id, ticket.jiraKey);
+        }
+      }
+    } catch (err) {
+      console.error(`[refine] error:`, err);
+    }
+  }
+
   io.on("connection", (socket: Socket) => {
     const data: SocketData = { sessionId: "", participantId: "" };
 
@@ -56,6 +105,11 @@ export function registerSocketHandlers(io: SocketIOServer, store: SessionStore):
 
         socket.emit("session-state", store.serializeSession(existing));
         socket.to(payload.sessionId).emit("participant-joined", participant);
+
+        // If host is joining a Jira-connected session, sync refine tickets
+        if (participant.isHost && store.getJiraConfig(payload.sessionId)) {
+          importRefineTickets(payload.sessionId);
+        }
       }
     );
 
@@ -103,9 +157,9 @@ export function registerSocketHandlers(io: SocketIOServer, store: SessionStore):
       return store.isHost(data.sessionId, data.participantId);
     }
 
-    socket.on("add-ticket", (payload: { title: string; jiraUrl?: string }) => {
+    socket.on("add-ticket", (payload: { title: string }) => {
       if (!requireHost()) return;
-      const ticket = store.addTicket(data.sessionId, payload.title, payload.jiraUrl);
+      const ticket = store.addTicket(data.sessionId, payload.title);
       if (ticket) {
         const serialized = store.serializeSession(store.getSession(data.sessionId)!);
         const clientTicket = serialized.tickets.find((t) => t.id === ticket.id);
@@ -114,7 +168,7 @@ export function registerSocketHandlers(io: SocketIOServer, store: SessionStore):
       }
     });
 
-    socket.on("add-tickets-bulk", (payload: { tickets: { title: string; jiraUrl?: string }[] }) => {
+    socket.on("add-tickets-bulk", (payload: { tickets: { title: string }[] }) => {
       if (!requireHost()) return;
       const tickets = store.addTicketsBulk(data.sessionId, payload.tickets);
       if (tickets.length > 0) {
@@ -149,6 +203,22 @@ export function registerSocketHandlers(io: SocketIOServer, store: SessionStore):
         const clientTicket = serialized.tickets.find((t) => t.id === ticket.id);
         io.to(data.sessionId).emit("ticket-updated", clientTicket);
         io.to(data.sessionId).emit("active-ticket-changed", { ticketId: payload.ticketId });
+        io.to(data.sessionId).emit("host-viewing-changed", { ticketId: payload.ticketId });
+      }
+    });
+
+    socket.on("set-active-ticket", (payload: { ticketId: string }) => {
+      if (!requireHost()) return;
+      if (store.setActiveTicket(data.sessionId, payload.ticketId)) {
+        io.to(data.sessionId).emit("active-ticket-changed", { ticketId: payload.ticketId });
+        io.to(data.sessionId).emit("host-viewing-changed", { ticketId: payload.ticketId });
+      }
+    });
+
+    socket.on("set-host-viewing", (payload: { ticketId: string }) => {
+      if (!requireHost()) return;
+      if (store.setHostViewingTicket(data.sessionId, payload.ticketId)) {
+        io.to(data.sessionId).emit("host-viewing-changed", { ticketId: payload.ticketId });
       }
     });
 
@@ -183,6 +253,34 @@ export function registerSocketHandlers(io: SocketIOServer, store: SessionStore):
       io.to(data.sessionId).emit("timer-stopped", {});
     });
 
+    socket.on("sync-refine-tickets", async () => {
+      if (!requireHost()) return;
+      await importRefineTickets(data.sessionId);
+    });
+
+    socket.on("assign-points", async (payload: { ticketId: string; points: number }) => {
+      if (!requireHost()) return;
+      const config = store.getJiraConfig(data.sessionId);
+      const session = store.getSession(data.sessionId);
+      const ticket = session?.tickets.find((t) => t.id === payload.ticketId);
+      if (!config || !ticket?.jiraKey || !session) return;
+
+      // Discover and cache the story points field ID once per session
+      if (!session.jiraStoryPointsField) {
+        session.jiraStoryPointsField = await getStoryPointsFieldId(config, ticket.jiraKey);
+      }
+
+      const fieldId = session.jiraStoryPointsField;
+      console.log(`[jira] assigning ${payload.points} pts to ${ticket.jiraKey} via field "${fieldId}"`);
+
+      try {
+        await assignStoryPoints(config, ticket.jiraKey, payload.points, fieldId);
+        io.to(data.sessionId).emit("points-assigned", { ticketId: payload.ticketId, points: payload.points, fieldId });
+      } catch (err) {
+        socket.emit("jira-error", { ticketId: payload.ticketId, message: `Failed to assign points: ${(err as Error).message}` });
+      }
+    });
+
     socket.on("configure-jira", async (payload: { baseUrl: string; email: string; apiToken: string }) => {
       if (!requireHost()) return;
       const config = { baseUrl: payload.baseUrl, email: payload.email, apiToken: payload.apiToken };
@@ -190,35 +288,23 @@ export function registerSocketHandlers(io: SocketIOServer, store: SessionStore):
       if (valid) {
         store.setJiraConfig(data.sessionId, config);
         io.to(data.sessionId).emit("jira-configured", { connected: true });
-        // Fetch context for any existing tickets with Jira keys
+
         const session = store.getSession(data.sessionId);
         if (session) {
+          // Fetch context for any existing tickets with Jira keys
           for (const ticket of session.tickets) {
             if (ticket.jiraKey && !ticket.jiraDescription) {
               fetchJiraContextIfNeeded(data.sessionId, ticket.id, ticket.jiraKey);
             }
           }
+
+          // Auto-import backlog tickets labeled 'refine'
+          importRefineTickets(data.sessionId);
         }
       } else {
         socket.emit("jira-error", { message: "Invalid Jira credentials. Check your base URL, email, and API token." });
       }
     });
-
-    async function fetchJiraContextIfNeeded(sessionId: string, ticketId: string, jiraKey?: string) {
-      if (!jiraKey) return;
-      const config = store.getJiraConfig(sessionId);
-      if (!config) return;
-      try {
-        const { description, comments } = await fetchJiraIssue(config, jiraKey);
-        store.setJiraContext(sessionId, ticketId, description, comments);
-        io.to(sessionId).emit("jira-context-loaded", { ticketId, description, comments });
-      } catch (err) {
-        io.to(sessionId).emit("jira-error", {
-          ticketId,
-          message: `Failed to fetch Jira issue ${jiraKey}: ${(err as Error).message}`,
-        });
-      }
-    }
 
     socket.on("disconnect", () => {
       const result = store.disconnectParticipant(socket.id);

@@ -42,9 +42,7 @@ export function BulkImport({ open, onClose }: BulkImportProps) {
           >
             <h2 className="text-lg font-semibold text-secondary">Bulk Import Tickets</h2>
             <p className="mt-1 text-sm text-muted">
-              One ticket per line. Formats: <code className="text-xs bg-gray-100 px-1 rounded">Title</code>,{" "}
-              <code className="text-xs bg-gray-100 px-1 rounded">JIRA-123 Title</code>, or{" "}
-              <code className="text-xs bg-gray-100 px-1 rounded">Title https://jira.url</code>
+              One ticket per line. Use <code className="text-xs bg-gray-100 px-1 rounded">TA2-123 Title</code> to link to Jira automatically.
             </p>
             <textarea
               value={text}

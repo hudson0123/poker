@@ -30,7 +30,7 @@ export function VotingArea() {
     const currentIndex = session.tickets.findIndex((t) => t.id === currentTicket.id);
     const nextTicket = session.tickets[currentIndex + 1];
     if (nextTicket) {
-      emit("start-voting", { ticketId: nextTicket.id });
+      emit("set-active-ticket", { ticketId: nextTicket.id });
     }
   };
 
@@ -40,8 +40,8 @@ export function VotingArea() {
     <div className="space-y-4">
       {/* Voting cards */}
       {(isVoting || isWaiting) && !amSpectator && (
-        <div className="rounded-xl bg-surface p-6 shadow-sm">
-          <div className="flex flex-wrap justify-center gap-3">
+        <div className="rounded-xl bg-surface px-4 py-3 shadow-sm">
+          <div className="flex flex-wrap justify-center gap-2">
             {ALL_VOTE_VALUES.map((value) => (
               <PointCard
                 key={String(value)}

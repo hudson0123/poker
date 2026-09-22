@@ -13,25 +13,31 @@ export function TicketHeader() {
     );
   }
 
+  const displayTitle = currentTicket.title === currentTicket.jiraKey ? "" : currentTicket.title;
+
   return (
     <div className="rounded-xl bg-surface p-4 shadow-sm">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <h2 className="text-lg font-semibold text-secondary">
             {currentTicket.jiraKey && (
-              <span className="text-primary">{currentTicket.jiraKey}: </span>
+              <span className="text-primary">
+                {currentTicket.jiraKey}{displayTitle ? ": " : ""}
+              </span>
             )}
-            {currentTicket.title}
+            {displayTitle}
           </h2>
           {currentTicket.jiraDescription && (
-            <p className="mt-2 text-sm text-muted whitespace-pre-wrap line-clamp-3">
-              {currentTicket.jiraDescription}
-            </p>
+            <div className="mt-2 max-h-56 overflow-y-auto">
+              <p className="text-sm text-muted whitespace-pre-wrap leading-relaxed">
+                {currentTicket.jiraDescription}
+              </p>
+            </div>
           )}
         </div>
-        {currentTicket.jiraUrl && (
+        {currentTicket.jiraKey && (
           <a
-            href={currentTicket.jiraUrl}
+            href={currentTicket.jiraUrl ?? `https://talkiatry.atlassian.net/browse/${currentTicket.jiraKey}`}
             target="_blank"
             rel="noopener noreferrer"
             className="flex-shrink-0 rounded-lg bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/20 transition-colors"

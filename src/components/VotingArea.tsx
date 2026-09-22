@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useSession } from "@/context/SessionContext";
 import { PointCard } from "./PointCard";
 import { ALL_VOTE_VALUES, VoteValue } from "@/lib/types";
@@ -7,19 +8,30 @@ import { ALL_VOTE_VALUES, VoteValue } from "@/lib/types";
 export function VotingArea() {
   const { currentTicket, myParticipantId, isHost, emit, session } = useSession();
 
+  // The server never sends real vote values back to clients until a ticket is
+  // revealed (see SessionStore.serializeSession) — so the local voter is the
+  // only source of truth for their own selection while voting is in progress.
+  const [myLocalVote, setMyLocalVote] = useState<VoteValue | undefined>(undefined);
+
+  useEffect(() => {
+    setMyLocalVote(undefined);
+  }, [currentTicket?.id, currentTicket?.round]);
+
   if (!currentTicket) return null;
 
-  const myVote: VoteValue | undefined = currentTicket.votes[myParticipantId];
   const isVoting = currentTicket.status === "voting";
   const isRevealed = currentTicket.status === "revealed";
   const isWaiting = currentTicket.status === "waiting";
+  const myVote: VoteValue | undefined = isRevealed ? currentTicket.votes[myParticipantId] : myLocalVote;
   const amSpectator = session?.participants.find((p) => p.id === myParticipantId)?.isSpectator ?? false;
 
   const handleVote = (value: VoteValue) => {
     if (!isVoting || amSpectator) return;
     if (myVote === value) {
+      setMyLocalVote(undefined);
       emit("clear-vote", { ticketId: currentTicket.id });
     } else {
+      setMyLocalVote(value);
       emit("submit-vote", { ticketId: currentTicket.id, points: value });
     }
   };

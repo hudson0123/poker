@@ -6,7 +6,8 @@ let socket: Socket | null = null;
 
 export function getSocket(): Socket {
   if (!socket) {
-    socket = io({ transports: ["websocket", "polling"], autoConnect: false });
+    const url = process.env.NEXT_PUBLIC_SOCKET_URL ?? "";
+    socket = io(url, { transports: ["websocket", "polling"], autoConnect: false });
   }
   return socket;
 }

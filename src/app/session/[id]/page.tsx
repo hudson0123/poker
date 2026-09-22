@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { SessionProvider, useSession } from "@/context/SessionContext";
 import { Sidebar } from "@/components/Sidebar";
@@ -15,16 +15,10 @@ import { POINT_VALUES } from "@/lib/types";
 
 function SessionContent() {
   const { session, error, currentTicket, amSpectator, castVote, isReconnecting } = useSession();
-  const [commentsOpen, setCommentsOpen] = useState(false);
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-
-      if (e.key === "Escape") {
-        setCommentsOpen(false);
-        return;
-      }
 
       const digit = Number(e.key);
       if (!Number.isInteger(digit) || digit < 1 || digit > 9) return;
@@ -77,19 +71,11 @@ function SessionContent() {
         <RevealView />
         <div className="flex items-center justify-between">
           <Timer />
-          <div className="flex items-center gap-2">
-            <ExportSummary />
-            <button
-              onClick={() => setCommentsOpen(!commentsOpen)}
-              className="rounded-lg border border-gray-200 px-4 py-1.5 text-sm text-muted hover:border-primary hover:text-primary transition-colors"
-            >
-              💬 Comments
-            </button>
-          </div>
+          <ExportSummary />
         </div>
         <ParticipantList />
+        <CommentsPanel />
       </main>
-      <CommentsPanel open={commentsOpen} onClose={() => setCommentsOpen(false)} />
     </div>
   );
 }

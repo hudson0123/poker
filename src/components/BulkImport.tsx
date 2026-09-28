@@ -62,7 +62,7 @@ export function BulkImport({ open, onClose }: BulkImportProps) {
               <button
                 onClick={handleImport}
                 disabled={parsed.length === 0}
-                className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-50 hover:bg-primary-dark"
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-secondary disabled:opacity-50 hover:bg-primary-dark"
               >
                 Import {parsed.length > 0 ? `${parsed.length} Tickets` : ""}
               </button>

@@ -96,7 +96,7 @@ export function CommentsPanel() {
               <button
                 onClick={handleSubmit}
                 disabled={!text.trim()}
-                className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50 hover:bg-primary-dark transition-colors"
+                className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-secondary disabled:opacity-50 hover:bg-primary-dark transition-colors"
               >
                 Send
               </button>

@@ -57,7 +57,7 @@ describe("SessionStore", () => {
       sessionId = session.id;
       store.joinSession(sessionId, "user-1", "Bob", "socket-1", false);
       const ticket = store.addTicket(sessionId, "TICKET-1: Login");
-      store.startVoting(sessionId, ticket!.id);
+      store.moveHostTo(sessionId, ticket!.id);
     });
 
     it("records a vote", () => {
@@ -96,28 +96,114 @@ describe("SessionStore", () => {
     });
   });
 
-  describe("startVoting", () => {
-    it("leaves a fresh ticket's round and votes untouched", () => {
+  describe("moveHostTo", () => {
+    let sessionId: string;
+    let first: string;
+    let second: string;
+
+    beforeEach(() => {
       const session = store.createSession("Sprint 42", "host-id", "Alice");
-      const ticket = store.addTicket(session.id, "TICKET-1")!;
-      const started = store.startVoting(session.id, ticket.id);
-      expect(started?.status).toBe("voting");
-      expect(started?.round).toBe(1);
-      expect(started?.votes.size).toBe(0);
+      sessionId = session.id;
+      store.joinSession(sessionId, "user-1", "Bob", "socket-1", false);
+      first = store.addTicket(sessionId, "TICKET-1")!.id;
+      second = store.addTicket(sessionId, "TICKET-2")!.id;
     });
 
-    it("clears stale votes and increments round when restarting a revealed ticket", () => {
-      const session = store.createSession("Sprint 42", "host-id", "Alice");
-      store.joinSession(session.id, "user-1", "Bob", "socket-1", false);
-      const ticket = store.addTicket(session.id, "TICKET-1")!;
-      store.startVoting(session.id, ticket.id);
-      store.submitVote(session.id, "user-1", ticket.id, 5);
-      store.revealVotes(session.id, ticket.id);
+    it("opens voting on the ticket the host moves to", () => {
+      const result = store.moveHostTo(sessionId, first);
+      const session = store.getSession(sessionId)!;
+      expect(result?.opened.status).toBe("voting");
+      expect(result?.opened.round).toBe(1);
+      expect(result?.paused).toBeNull();
+      expect(session.activeTicketId).toBe(first);
+      expect(session.hostViewingTicketId).toBe(first);
+    });
 
-      const restarted = store.startVoting(session.id, ticket.id);
-      expect(restarted?.status).toBe("voting");
-      expect(restarted?.round).toBe(2);
-      expect(restarted?.votes.size).toBe(0);
+    it("pauses the ticket the host leaves, keeping its votes, and resumes it on return", () => {
+      store.moveHostTo(sessionId, first);
+      store.submitVote(sessionId, "user-1", first, 5);
+
+      const away = store.moveHostTo(sessionId, second);
+      expect(away?.paused?.id).toBe(first);
+      expect(away?.paused?.status).toBe("waiting");
+      expect(away?.paused?.votes.get("user-1")).toBe(5);
+
+      const back = store.moveHostTo(sessionId, first);
+      expect(back?.opened.status).toBe("voting");
+      expect(back?.opened.votes.get("user-1")).toBe(5);
+      expect(back?.paused?.id).toBe(second);
+    });
+
+    it("keeps only the host's ticket open for voting", () => {
+      store.moveHostTo(sessionId, first);
+      store.moveHostTo(sessionId, second);
+      const statuses = store.getSession(sessionId)!.tickets.map((t) => t.status);
+      expect(statuses).toEqual(["waiting", "voting"]);
+      expect(store.submitVote(sessionId, "user-1", first, 5)).toBe(false);
+      expect(store.clearVote(sessionId, "user-1", first)).toBe(false);
+    });
+
+    it("leaves a revealed ticket revealed when the host returns to it", () => {
+      store.moveHostTo(sessionId, first);
+      store.revealVotes(sessionId, first);
+      store.moveHostTo(sessionId, second);
+
+      const back = store.moveHostTo(sessionId, first);
+      expect(back?.opened.status).toBe("revealed");
+      expect(back?.paused?.id).toBe(second);
+    });
+
+    it("returns null for an unknown ticket", () => {
+      expect(store.moveHostTo(sessionId, "missing")).toBeNull();
+    });
+  });
+
+  describe("revealIfAllVoted", () => {
+    let sessionId: string;
+    let ticketId: string;
+
+    beforeEach(() => {
+      const session = store.createSession("Sprint 42", "host-id", "Alice");
+      sessionId = session.id;
+      store.joinSession(sessionId, "user-1", "Bob", "socket-1", false);
+      ticketId = store.addTicket(sessionId, "TICKET-1")!.id;
+      store.moveHostTo(sessionId, ticketId);
+    });
+
+    it("does nothing while an eligible voter hasn't voted", () => {
+      store.submitVote(sessionId, "user-1", ticketId, 5);
+      expect(store.revealIfAllVoted(sessionId)).toBeNull();
+      expect(store.getSession(sessionId)!.tickets[0].status).toBe("voting");
+    });
+
+    it("reveals once every connected voter, including the host, has voted", () => {
+      store.submitVote(sessionId, "user-1", ticketId, 5);
+      store.submitVote(sessionId, "host-id", ticketId, "?");
+      const result = store.revealIfAllVoted(sessionId);
+      expect(result?.ticket.id).toBe(ticketId);
+      expect(result?.ticket.status).toBe("revealed");
+    });
+
+    it("ignores spectators and disconnected participants", () => {
+      store.joinSession(sessionId, "watcher", "Dana", "socket-2", true);
+      store.joinSession(sessionId, "dropped", "Eve", "socket-3", false);
+      store.disconnectParticipant("socket-3");
+      store.submitVote(sessionId, "user-1", ticketId, 5);
+      store.submitVote(sessionId, "host-id", ticketId, 5);
+      expect(store.revealIfAllVoted(sessionId)?.ticket.status).toBe("revealed");
+    });
+
+    it("does not reveal when nobody is eligible to vote", () => {
+      store.disconnectParticipant("socket-1");
+      store.getSession(sessionId)!.participants.get("host-id")!.isConnected = false;
+      expect(store.revealIfAllVoted(sessionId)).toBeNull();
+    });
+
+    it("does not reveal a ticket twice", () => {
+      store.submitVote(sessionId, "user-1", ticketId, 5);
+      store.submitVote(sessionId, "host-id", ticketId, 5);
+      store.revealIfAllVoted(sessionId);
+      expect(store.revealIfAllVoted(sessionId)).toBeNull();
     });
   });
 
@@ -127,7 +213,7 @@ describe("SessionStore", () => {
       store.joinSession(session.id, "user-1", "Bob", "socket-1", false);
       store.joinSession(session.id, "user-2", "Carol", "socket-2", false);
       const ticket = store.addTicket(session.id, "TICKET-1")!;
-      store.startVoting(session.id, ticket.id);
+      store.moveHostTo(session.id, ticket.id);
       store.submitVote(session.id, "user-1", ticket.id, 5);
       store.submitVote(session.id, "user-2", ticket.id, 5);
 
@@ -143,7 +229,7 @@ describe("SessionStore", () => {
       const session = store.createSession("Sprint 42", "host-id", "Alice");
       store.joinSession(session.id, "user-1", "Bob", "socket-1", false);
       const ticket = store.addTicket(session.id, "TICKET-1")!;
-      store.startVoting(session.id, ticket.id);
+      store.moveHostTo(session.id, ticket.id);
       store.submitVote(session.id, "user-1", ticket.id, 5);
       store.revealVotes(session.id, ticket.id);
 
@@ -155,11 +241,23 @@ describe("SessionStore", () => {
   });
 
   describe("serializeSession", () => {
+    it("lists who has voted on unrevealed tickets without their values", () => {
+      const session = store.createSession("Sprint 42", "host-id", "Alice");
+      store.joinSession(session.id, "user-1", "Bob", "socket-1", false);
+      const ticket = store.addTicket(session.id, "TICKET-1")!;
+      store.moveHostTo(session.id, ticket.id);
+      store.submitVote(session.id, "user-1", ticket.id, 5);
+
+      const serialized = store.serializeSession(store.getSession(session.id)!);
+      expect(serialized.tickets[0].voterIds).toEqual(["user-1"]);
+      expect(serialized.tickets[0].votes).toEqual({});
+    });
+
     it("strips vote values from unrevealed tickets", () => {
       const session = store.createSession("Sprint 42", "host-id", "Alice");
       store.joinSession(session.id, "user-1", "Bob", "socket-1", false);
       const ticket = store.addTicket(session.id, "TICKET-1")!;
-      store.startVoting(session.id, ticket.id);
+      store.moveHostTo(session.id, ticket.id);
       store.submitVote(session.id, "user-1", ticket.id, 5);
 
       const serialized = store.serializeSession(store.getSession(session.id)!);
@@ -172,7 +270,7 @@ describe("SessionStore", () => {
       const session = store.createSession("Sprint 42", "host-id", "Alice");
       store.joinSession(session.id, "user-1", "Bob", "socket-1", false);
       const ticket = store.addTicket(session.id, "TICKET-1")!;
-      store.startVoting(session.id, ticket.id);
+      store.moveHostTo(session.id, ticket.id);
       store.submitVote(session.id, "user-1", ticket.id, 5);
       store.revealVotes(session.id, ticket.id);
 
@@ -188,6 +286,18 @@ describe("SessionStore", () => {
       expect(session.tickets).toHaveLength(1);
       store.removeTicket(session.id, ticket.id);
       expect(session.tickets).toHaveLength(0);
+    });
+
+    it("moves the host to the first remaining ticket when the active one is removed", () => {
+      const session = store.createSession("Sprint 42", "host-id", "Alice");
+      const first = store.addTicket(session.id, "TICKET-1")!;
+      const second = store.addTicket(session.id, "TICKET-2")!;
+      store.moveHostTo(session.id, first.id);
+
+      store.removeTicket(session.id, first.id);
+      expect(session.activeTicketId).toBe(second.id);
+      expect(session.hostViewingTicketId).toBe(second.id);
+      expect(session.tickets[0].status).toBe("voting");
     });
 
     it("bulk adds tickets", () => {
@@ -209,6 +319,25 @@ describe("SessionStore", () => {
       expect(comment?.text).toBe("Needs more context");
       expect(comment?.participantName).toBe("Alice");
       expect(session.tickets[0].comments).toHaveLength(1);
+    });
+  });
+
+  describe("assignedPoints", () => {
+    it("records Jira-assigned points on the ticket they were assigned to only", () => {
+      const session = store.createSession("Sprint 42", "host-id", "Alice");
+      const first = store.addTicket(session.id, "TA2-1 First")!;
+      const second = store.addTicket(session.id, "TA2-2 Second")!;
+
+      expect(store.setAssignedPoints(session.id, first.id, 3)).toBe(true);
+
+      const serialized = store.serializeSession(session);
+      expect(serialized.tickets.find((t) => t.id === first.id)?.assignedPoints).toBe(3);
+      expect(serialized.tickets.find((t) => t.id === second.id)?.assignedPoints).toBeUndefined();
+    });
+
+    it("returns false for an unknown ticket", () => {
+      const session = store.createSession("Sprint 42", "host-id", "Alice");
+      expect(store.setAssignedPoints(session.id, "missing", 3)).toBe(false);
     });
   });
 

@@ -1,8 +1,8 @@
-export type VoteValue = number | "?" | "☕";
+export type VoteValue = number | "?" | "🍿";
 export type TicketStatus = "waiting" | "voting" | "revealed";
 
 export const POINT_VALUES = [1, 2, 3, 5, 8, 13, 21] as const;
-export const SPECIAL_VALUES = ["?", "☕"] as const;
+export const SPECIAL_VALUES = ["?", "🍿"] as const;
 export const ALL_VOTE_VALUES: readonly VoteValue[] = [...POINT_VALUES, ...SPECIAL_VALUES];
 
 export interface Session {
@@ -23,8 +23,13 @@ export interface Ticket {
   jiraUrl?: string;
   jiraDescription?: string;
   jiraComments?: JiraComment[];
+  /** Story points last written to Jira for this ticket, if any. */
+  assignedPoints?: number;
   status: TicketStatus;
+  /** Vote values, only filled in once the ticket is revealed. */
   votes: Record<string, VoteValue>;
+  /** Who has voted this round; sent before reveal so progress survives refreshes. */
+  voterIds: string[];
   comments: Comment[];
   round: number;
 }

@@ -4,7 +4,7 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const metadata = {
-  title: "S2V Poker",
+  title: "S2V Poker · Talkiatry",
   description: "Sprint poker for Talkiatry",
 };
 

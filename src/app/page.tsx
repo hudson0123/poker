@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { TalkiatryLogo } from "@/components/TalkiatryLogo";
 import { useRouter } from "next/navigation";
 import { getSocket, getParticipantId } from "@/lib/socket";
 
@@ -46,10 +47,10 @@ export default function Home() {
     <main className="flex min-h-screen items-center justify-center p-4">
       <div className="w-full max-w-md space-y-8">
         <div className="text-center">
+          <TalkiatryLogo className="mx-auto mb-5 h-8" />
           <h1 className="text-5xl font-bold text-secondary">
-            S2V <span className="text-primary">Poker</span>
+            Planning <span className="underline decoration-primary decoration-[6px] underline-offset-[6px]">Poker</span>
           </h1>
-          <p className="mt-2 text-muted">Sprint planning, made fun</p>
         </div>
 
         {/* Create Session */}
@@ -60,19 +61,19 @@ export default function Home() {
             placeholder="Session name (e.g. Sprint 42)"
             value={sessionName}
             onChange={(e) => setSessionName(e.target.value)}
-            className="w-full rounded-lg border border-gray-200 px-4 py-3 text-secondary placeholder:text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+            className="w-full rounded-lg border border-gray-200 px-4 py-3 text-secondary placeholder:text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/60"
           />
           <input
             type="text"
             placeholder="Your name"
             value={hostName}
             onChange={(e) => setHostName(e.target.value)}
-            className="w-full rounded-lg border border-gray-200 px-4 py-3 text-secondary placeholder:text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+            className="w-full rounded-lg border border-gray-200 px-4 py-3 text-secondary placeholder:text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/60"
           />
           <button
             onClick={handleCreate}
             disabled={creating}
-            className="w-full rounded-lg bg-primary py-3 font-semibold text-white transition-colors hover:bg-primary-dark disabled:opacity-50"
+            className="w-full rounded-lg bg-primary py-3 font-semibold text-secondary transition-colors hover:bg-primary-dark disabled:opacity-50"
           >
             {creating ? "Creating..." : "Create Session"}
           </button>
@@ -87,11 +88,11 @@ export default function Home() {
             value={joinLink}
             onChange={(e) => setJoinLink(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && handleJoin()}
-            className="w-full rounded-lg border border-gray-200 px-4 py-3 text-secondary placeholder:text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+            className="w-full rounded-lg border border-gray-200 px-4 py-3 text-secondary placeholder:text-muted focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/60"
           />
           <button
             onClick={handleJoin}
-            className="w-full rounded-lg border-2 border-primary py-3 font-semibold text-primary transition-colors hover:bg-primary hover:text-white"
+            className="w-full rounded-lg border-2 border-primary py-3 font-semibold text-primary-ink transition-colors hover:bg-primary hover:text-secondary"
           >
             Join Session
           </button>

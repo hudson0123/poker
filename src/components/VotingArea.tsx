@@ -9,13 +9,10 @@ export function VotingArea() {
 
   if (!currentTicket) return null;
 
+  // Only the host's ticket is ever open for voting; any other ticket a
+  // participant browses to is read-only.
   const isVoting = currentTicket.status === "voting";
-  const isWaiting = currentTicket.status === "waiting";
   const isRevealed = currentTicket.status === "revealed";
-
-  const handleStartVoting = () => {
-    emit("start-voting", { ticketId: currentTicket.id });
-  };
 
   const handleReveal = () => {
     emit("reveal-votes", { ticketId: currentTicket.id });
@@ -39,7 +36,7 @@ export function VotingArea() {
   return (
     <div className="space-y-4">
       {/* Voting cards */}
-      {(isVoting || isWaiting) && !amSpectator && (
+      {isVoting && !amSpectator && (
         <div className="rounded-xl bg-surface px-4 py-3 shadow-sm">
           <div className="flex flex-wrap justify-center gap-2">
             {ALL_VOTE_VALUES.map((value) => (
@@ -47,50 +44,37 @@ export function VotingArea() {
                 key={String(value)}
                 value={value}
                 selected={myVote === value}
-                disabled={!isVoting}
+                disabled={false}
                 onClick={() => castVote(value)}
               />
             ))}
           </div>
-          {isWaiting && (
-            <p className="mt-4 text-center text-sm text-muted">
-              {isHost ? "Start voting when ready" : "Waiting for host to start voting..."}
-            </p>
-          )}
         </div>
       )}
 
       {/* Host controls */}
       {isHost && (
         <div className="flex justify-center gap-3">
-          {isWaiting && (
-            <button
-              onClick={handleStartVoting}
-              className="rounded-lg bg-primary px-6 py-2.5 font-semibold text-white transition-colors hover:bg-primary-dark"
-            >
-              Start Voting
-            </button>
-          )}
           {isVoting && (
             <button
               onClick={handleReveal}
-              className="rounded-lg bg-accent px-6 py-2.5 font-semibold text-white transition-colors hover:bg-accent-light"
+              className="rounded-lg bg-secondary px-6 py-2.5 font-semibold text-white transition-colors hover:bg-secondary-light"
             >
-              End Voting &amp; Reveal
+              End Voting Now
             </button>
           )}
           {isRevealed && (
             <>
               <button
                 onClick={handleResetVoting}
-                className="rounded-lg border-2 border-primary px-6 py-2.5 font-semibold text-primary transition-colors hover:bg-primary hover:text-white"
+                className="rounded-lg border-2 border-primary px-6 py-2.5 font-semibold text-primary-ink transition-colors hover:bg-primary hover:text-secondary"
               >
                 Re-vote
               </button>
               {hasNextTicket && (
                 <button
                   onClick={handleNextTicket}
-                  className="rounded-lg bg-primary px-6 py-2.5 font-semibold text-white transition-colors hover:bg-primary-dark"
+                  className="rounded-lg bg-primary px-6 py-2.5 font-semibold text-secondary transition-colors hover:bg-primary-dark"
                 >
                   Next Ticket &rarr;
                 </button>

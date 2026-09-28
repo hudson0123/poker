@@ -21,7 +21,7 @@ describe("computeVoteStats", () => {
   });
 
   it("excludes special values from stats", () => {
-    const votes: Record<string, VoteValue> = { a: 3, b: "?", c: 5, d: "☕" };
+    const votes: Record<string, VoteValue> = { a: 3, b: "?", c: 5, d: "🍿" };
     const stats = computeVoteStats(votes);
     expect(stats.average).toBe(4);
     expect(stats.median).toBe(4);
@@ -30,7 +30,7 @@ describe("computeVoteStats", () => {
   });
 
   it("returns zeros when no numeric votes", () => {
-    const votes: Record<string, VoteValue> = { a: "?", b: "☕" };
+    const votes: Record<string, VoteValue> = { a: "?", b: "🍿" };
     const stats = computeVoteStats(votes);
     expect(stats.average).toBe(0);
     expect(stats.median).toBe(0);

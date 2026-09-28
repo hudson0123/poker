@@ -21,7 +21,7 @@ export function ExportSummary() {
   return (
     <button
       onClick={handleExport}
-      className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-muted hover:border-primary hover:text-primary transition-colors"
+      className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-muted hover:border-primary hover:text-primary-ink transition-colors"
     >
       {copied ? "Copied!" : "Export Summary"}
     </button>

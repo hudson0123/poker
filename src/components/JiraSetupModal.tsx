@@ -58,7 +58,7 @@ export function JiraSetupModal({ open, onClose }: JiraSetupModalProps) {
                     href="https://id.atlassian.com/manage-profile/security/api-tokens"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-primary hover:underline"
+                    className="text-primary-ink hover:underline"
                   >
                     Generate an API token
                   </a>
@@ -94,7 +94,7 @@ export function JiraSetupModal({ open, onClose }: JiraSetupModalProps) {
                 <button
                   onClick={handleSubmit}
                   disabled={loading || !email.trim() || !apiToken.trim()}
-                  className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-50 hover:bg-primary-dark"
+                  className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-secondary disabled:opacity-50 hover:bg-primary-dark"
                 >
                   {loading ? "Connecting..." : "Connect"}
                 </button>

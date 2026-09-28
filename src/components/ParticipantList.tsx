@@ -11,9 +11,11 @@ export function ParticipantList() {
   const voters = session.participants.filter((p) => !p.isSpectator && p.isConnected);
   const spectators = session.participants.filter((p) => p.isSpectator && p.isConnected);
 
+  // true = voted, false = still to vote on the open ticket, null = nothing to show.
   const hasVoted = (participantId: string): boolean | null => {
-    if (!currentTicket || currentTicket.status === "waiting") return null;
-    return participantId in currentTicket.votes;
+    if (!currentTicket) return null;
+    if (currentTicket.voterIds.includes(participantId)) return true;
+    return currentTicket.status === "voting" ? false : null;
   };
 
   const revealedVote = (participantId: string): string | null => {
@@ -45,7 +47,7 @@ export function ParticipantList() {
                     initial={{ rotateY: 180 }}
                     animate={{ rotateY: 0 }}
                     transition={{ duration: 0.4 }}
-                    className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-sm font-bold text-primary"
+                    className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-sm font-bold text-primary-ink"
                   >
                     {vote}
                   </motion.span>
@@ -64,7 +66,7 @@ export function ParticipantList() {
                 )}
                 <span className="text-sm text-secondary">
                   {p.name}
-                  {p.isHost && <span className="ml-1 text-xs text-primary">(host)</span>}
+                  {p.isHost && <span className="ml-1 text-xs text-primary-ink">(host)</span>}
                 </span>
               </motion.div>
             );

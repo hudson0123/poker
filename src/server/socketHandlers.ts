@@ -1,7 +1,7 @@
 import { Server as SocketIOServer, Socket } from "socket.io";
-import { SessionStore } from "./SessionStore";
+import { ServerTicket, SessionStore } from "./SessionStore";
 import { fetchJiraIssue, validateJiraCredentials, assignStoryPoints, getStoryPointsFieldId, fetchRefineTickets } from "./jiraClient";
-import { ALL_VOTE_VALUES, VoteValue } from "@/lib/types";
+import { ALL_VOTE_VALUES, VoteStats, VoteValue } from "@/lib/types";
 
 interface SocketData {
   sessionId: string;
@@ -56,6 +56,36 @@ export function registerSocketHandlers(io: SocketIOServer, store: SessionStore):
     } catch (err) {
       console.error(`[refine] error:`, err);
     }
+  }
+
+  function emitTicket(sessionId: string, ticketId: string) {
+    const session = store.getSession(sessionId);
+    const clientTicket = session ? store.serializeSession(session).tickets.find((t) => t.id === ticketId) : undefined;
+    if (clientTicket) io.to(sessionId).emit("ticket-updated", clientTicket);
+  }
+
+  function emitReveal(sessionId: string, result: { ticket: ServerTicket; stats: VoteStats }) {
+    io.to(sessionId).emit("votes-revealed", {
+      ticketId: result.ticket.id,
+      votes: Object.fromEntries(result.ticket.votes),
+      stats: result.stats,
+    });
+  }
+
+  // Ends voting automatically once every eligible voter has voted. Called after
+  // anything that can complete the set: a vote, a disconnect, or resuming a ticket.
+  function autoRevealIfComplete(sessionId: string) {
+    const result = store.revealIfAllVoted(sessionId);
+    if (result) emitReveal(sessionId, result);
+  }
+
+  function moveHost(sessionId: string, ticketId: string) {
+    const moved = store.moveHostTo(sessionId, ticketId);
+    if (!moved) return;
+    if (moved.paused) emitTicket(sessionId, moved.paused.id);
+    emitTicket(sessionId, moved.opened.id);
+    io.to(sessionId).emit("active-ticket-changed", { ticketId });
+    autoRevealIfComplete(sessionId);
   }
 
   io.on("connection", (socket: Socket) => {
@@ -126,6 +156,7 @@ export function registerSocketHandlers(io: SocketIOServer, store: SessionStore):
           participantId: data.participantId,
           hasVoted: true,
         });
+        autoRevealIfComplete(data.sessionId);
       }
     });
 
@@ -189,49 +220,24 @@ export function registerSocketHandlers(io: SocketIOServer, store: SessionStore):
         if (wasActive) {
           const newActiveTicketId = store.getSession(data.sessionId)?.activeTicketId ?? null;
           if (newActiveTicketId) {
+            emitTicket(data.sessionId, newActiveTicketId);
             io.to(data.sessionId).emit("active-ticket-changed", { ticketId: newActiveTicketId });
+            autoRevealIfComplete(data.sessionId);
           }
         }
       }
     });
 
-    socket.on("start-voting", (payload: { ticketId: string }) => {
-      if (!requireHost()) return;
-      const ticket = store.startVoting(data.sessionId, payload.ticketId);
-      if (ticket) {
-        const serialized = store.serializeSession(store.getSession(data.sessionId)!);
-        const clientTicket = serialized.tickets.find((t) => t.id === ticket.id);
-        io.to(data.sessionId).emit("ticket-updated", clientTicket);
-        io.to(data.sessionId).emit("active-ticket-changed", { ticketId: payload.ticketId });
-        io.to(data.sessionId).emit("host-viewing-changed", { ticketId: payload.ticketId });
-      }
-    });
-
+    // Voting follows the host: wherever the host goes, that ticket opens for voting.
     socket.on("set-active-ticket", (payload: { ticketId: string }) => {
       if (!requireHost()) return;
-      if (store.setActiveTicket(data.sessionId, payload.ticketId)) {
-        io.to(data.sessionId).emit("active-ticket-changed", { ticketId: payload.ticketId });
-        io.to(data.sessionId).emit("host-viewing-changed", { ticketId: payload.ticketId });
-      }
-    });
-
-    socket.on("set-host-viewing", (payload: { ticketId: string }) => {
-      if (!requireHost()) return;
-      if (store.setHostViewingTicket(data.sessionId, payload.ticketId)) {
-        io.to(data.sessionId).emit("host-viewing-changed", { ticketId: payload.ticketId });
-      }
+      moveHost(data.sessionId, payload.ticketId);
     });
 
     socket.on("reveal-votes", (payload: { ticketId: string }) => {
       if (!requireHost()) return;
       const result = store.revealVotes(data.sessionId, payload.ticketId);
-      if (result) {
-        io.to(data.sessionId).emit("votes-revealed", {
-          ticketId: payload.ticketId,
-          votes: Object.fromEntries(result.ticket.votes),
-          stats: result.stats,
-        });
-      }
+      if (result) emitReveal(data.sessionId, result);
     });
 
     socket.on("reset-voting", (payload: { ticketId: string }) => {
@@ -275,6 +281,7 @@ export function registerSocketHandlers(io: SocketIOServer, store: SessionStore):
 
       try {
         await assignStoryPoints(config, ticket.jiraKey, payload.points, fieldId);
+        store.setAssignedPoints(data.sessionId, payload.ticketId, payload.points);
         io.to(data.sessionId).emit("points-assigned", { ticketId: payload.ticketId, points: payload.points, fieldId });
       } catch (err) {
         socket.emit("jira-error", { ticketId: payload.ticketId, message: `Failed to assign points: ${(err as Error).message}` });
@@ -310,6 +317,7 @@ export function registerSocketHandlers(io: SocketIOServer, store: SessionStore):
       const result = store.disconnectParticipant(socket.id);
       if (result) {
         io.to(result.sessionId).emit("participant-left", { participantId: result.participantId });
+        autoRevealIfComplete(result.sessionId);
       }
     });
   });

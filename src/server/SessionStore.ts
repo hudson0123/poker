@@ -16,7 +16,7 @@ export interface ServerParticipant extends Participant {
   socketId: string;
 }
 
-export interface ServerTicket extends Omit<Ticket, "votes"> {
+export interface ServerTicket extends Omit<Ticket, "votes" | "voterIds"> {
   votes: Map<string, VoteValue>;
 }
 
@@ -145,7 +145,7 @@ export class SessionStore {
 
   clearVote(sessionId: string, participantId: string, ticketId: string): boolean {
     const ticket = this.findTicket(sessionId, ticketId);
-    if (!ticket) return false;
+    if (!ticket || ticket.status !== "voting") return false;
     ticket.votes.delete(participantId);
     this.touch(sessionId);
     return true;
@@ -186,44 +186,39 @@ export class SessionStore {
     if (idx === -1) return false;
     session.tickets.splice(idx, 1);
     if (session.activeTicketId === ticketId) {
-      session.activeTicketId = session.tickets[0]?.id ?? null;
+      session.activeTicketId = null;
+      session.hostViewingTicketId = null;
+      if (session.tickets[0]) this.moveHostTo(sessionId, session.tickets[0].id);
     }
     this.touch(sessionId);
     return true;
   }
 
-  startVoting(sessionId: string, ticketId: string): ServerTicket | null {
-    const ticket = this.findTicket(sessionId, ticketId);
-    if (!ticket) return null;
-    if (ticket.status === "revealed") {
-      ticket.votes.clear();
-      ticket.round += 1;
+  /**
+   * Voting only happens on the ticket the host is on. Moving the host pauses
+   * the ticket they leave (its votes are kept, hidden) and opens the one they
+   * arrive on, so at most one ticket is ever in "voting".
+   */
+  moveHostTo(
+    sessionId: string,
+    ticketId: string
+  ): { opened: ServerTicket; paused: ServerTicket | null } | null {
+    const session = this.sessions.get(sessionId);
+    const target = session?.tickets.find((t) => t.id === ticketId);
+    if (!session || !target) return null;
+
+    let paused: ServerTicket | null = null;
+    const previous = session.tickets.find((t) => t.id === session.activeTicketId);
+    if (previous && previous !== target && previous.status === "voting") {
+      previous.status = "waiting";
+      paused = previous;
     }
-    ticket.status = "voting";
-    const session = this.sessions.get(sessionId)!;
+    if (target.status === "waiting") target.status = "voting";
+
     session.activeTicketId = ticketId;
     session.hostViewingTicketId = ticketId;
     this.touch(sessionId);
-    return ticket;
-  }
-
-  setActiveTicket(sessionId: string, ticketId: string): boolean {
-    const session = this.sessions.get(sessionId);
-    if (!session) return false;
-    if (!session.tickets.some((t) => t.id === ticketId)) return false;
-    session.activeTicketId = ticketId;
-    session.hostViewingTicketId = ticketId;
-    this.touch(sessionId);
-    return true;
-  }
-
-  setHostViewingTicket(sessionId: string, ticketId: string): boolean {
-    const session = this.sessions.get(sessionId);
-    if (!session) return false;
-    if (!session.tickets.some((t) => t.id === ticketId)) return false;
-    session.hostViewingTicketId = ticketId;
-    this.touch(sessionId);
-    return true;
+    return { opened: target, paused };
   }
 
   revealVotes(sessionId: string, ticketId: string): { ticket: ServerTicket; stats: VoteStats } | null {
@@ -234,6 +229,17 @@ export class SessionStore {
     const stats = computeVoteStats(votesRecord);
     this.touch(sessionId);
     return { ticket, stats };
+  }
+
+  /** Reveals the host's ticket once every connected, non-spectator participant has voted. */
+  revealIfAllVoted(sessionId: string): { ticket: ServerTicket; stats: VoteStats } | null {
+    const session = this.sessions.get(sessionId);
+    const ticket = session?.tickets.find((t) => t.id === session.activeTicketId);
+    if (!session || !ticket || ticket.status !== "voting") return null;
+
+    const voters = Array.from(session.participants.values()).filter((p) => p.isConnected && !p.isSpectator);
+    if (voters.length === 0 || !voters.every((p) => ticket.votes.has(p.id))) return null;
+    return this.revealVotes(sessionId, ticket.id);
   }
 
   resetVoting(sessionId: string, ticketId: string): ServerTicket | null {
@@ -276,6 +282,14 @@ export class SessionStore {
     ticket.jiraDescription = description;
     ticket.jiraComments = comments;
     return ticket;
+  }
+
+  setAssignedPoints(sessionId: string, ticketId: string, points: number): boolean {
+    const ticket = this.findTicket(sessionId, ticketId);
+    if (!ticket) return false;
+    ticket.assignedPoints = points;
+    this.touch(sessionId);
+    return true;
   }
 
   isHost(sessionId: string, participantId: string): boolean {
@@ -332,8 +346,10 @@ export class SessionStore {
       jiraUrl: ticket.jiraUrl,
       jiraDescription: ticket.jiraDescription,
       jiraComments: ticket.jiraComments,
+      assignedPoints: ticket.assignedPoints,
       status: ticket.status,
       votes,
+      voterIds: Array.from(ticket.votes.keys()),
       comments: ticket.comments,
       round: ticket.round,
     };

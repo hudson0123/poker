@@ -26,12 +26,12 @@ type SessionAction =
   | { type: "VOTING_RESET"; ticketId: string; round: number }
   | { type: "COMMENT_ADDED"; ticketId: string; comment: Comment }
   | { type: "ACTIVE_TICKET_CHANGED"; ticketId: string }
-  | { type: "HOST_VIEWING_CHANGED"; ticketId: string }
   | { type: "SET_VIEWING_TICKET"; ticketId: string }
   | { type: "TIMER_STARTED"; endsAt: string }
   | { type: "TIMER_STOPPED" }
   | { type: "JIRA_CONFIGURED"; connected: boolean }
   | { type: "JIRA_CONTEXT_LOADED"; ticketId: string; description: string; comments: JiraComment[] }
+  | { type: "POINTS_ASSIGNED"; ticketId: string; points: number }
   | { type: "SET_JIRA_ERROR"; message: string };
 
 function sessionReducer(state: SessionState, action: SessionAction): SessionState {
@@ -79,13 +79,8 @@ function sessionReducer(state: SessionState, action: SessionAction): SessionStat
           ...session,
           tickets: session.tickets.map((t) => {
             if (t.id !== action.ticketId) return t;
-            const votes = { ...t.votes };
-            if (action.hasVoted) {
-              votes[action.participantId] = 0 as VoteValue; // placeholder — real value hidden
-            } else {
-              delete votes[action.participantId];
-            }
-            return { ...t, votes };
+            const others = t.voterIds.filter((id) => id !== action.participantId);
+            return { ...t, voterIds: action.hasVoted ? [...others, action.participantId] : others };
           }),
         },
       };
@@ -135,7 +130,9 @@ function sessionReducer(state: SessionState, action: SessionAction): SessionStat
         session: {
           ...session,
           tickets: session.tickets.map((t) =>
-            t.id === action.ticketId ? { ...t, status: "voting" as const, votes: {}, round: action.round } : t
+            t.id === action.ticketId
+              ? { ...t, status: "voting" as const, votes: {}, voterIds: [], round: action.round }
+              : t
           ),
         },
       };
@@ -158,13 +155,6 @@ function sessionReducer(state: SessionState, action: SessionAction): SessionStat
         ...state,
         session: { ...session, activeTicketId: action.ticketId, hostViewingTicketId: action.ticketId },
         viewingTicketId: action.ticketId,
-      };
-
-    case "HOST_VIEWING_CHANGED":
-      if (!session) return state;
-      return {
-        ...state,
-        session: { ...session, hostViewingTicketId: action.ticketId },
       };
 
     case "SET_VIEWING_TICKET":
@@ -194,6 +184,18 @@ function sessionReducer(state: SessionState, action: SessionAction): SessionStat
             t.id === action.ticketId
               ? { ...t, jiraDescription: action.description, jiraComments: action.comments }
               : t
+          ),
+        },
+      };
+
+    case "POINTS_ASSIGNED":
+      if (!session) return state;
+      return {
+        ...state,
+        session: {
+          ...session,
+          tickets: session.tickets.map((t) =>
+            t.id === action.ticketId ? { ...t, assignedPoints: action.points } : t
           ),
         },
       };
@@ -246,8 +248,10 @@ export function SessionProvider({ sessionId, participantName, isSpectator, child
   // revealed (see SessionStore.serializeSession) — so the local voter is the
   // only source of truth for their own selection while voting is in progress.
   // This lives here (rather than in VotingArea) so both VotingArea's cards and
-  // the page-level keyboard shortcuts read/write the same selection.
-  const [myLocalVote, setMyLocalVote] = useState<VoteValue | undefined>(undefined);
+  // the page-level keyboard shortcuts read/write the same selection. It's keyed
+  // by ticket and round so a vote is still highlighted when the host leaves a
+  // ticket mid-vote and later comes back to it.
+  const [myLocalVotes, setMyLocalVotes] = useState<Record<string, VoteValue>>({});
   const [isReconnecting, setIsReconnecting] = useState(false);
 
   useEffect(() => {
@@ -292,14 +296,14 @@ export function SessionProvider({ sessionId, participantName, isSpectator, child
       dispatch({ type: "COMMENT_ADDED", ...data });
     const onActiveTicketChanged = ({ ticketId }: { ticketId: string }) =>
       dispatch({ type: "ACTIVE_TICKET_CHANGED", ticketId });
-    const onHostViewingChanged = ({ ticketId }: { ticketId: string }) =>
-      dispatch({ type: "HOST_VIEWING_CHANGED", ticketId });
     const onTimerStarted = ({ endsAt }: { endsAt: string }) => dispatch({ type: "TIMER_STARTED", endsAt });
     const onTimerStopped = () => dispatch({ type: "TIMER_STOPPED" });
     const onJiraConfigured = ({ connected }: { connected: boolean }) =>
       dispatch({ type: "JIRA_CONFIGURED", connected });
     const onJiraContextLoaded = (data: { ticketId: string; description: string; comments: JiraComment[] }) =>
       dispatch({ type: "JIRA_CONTEXT_LOADED", ...data });
+    const onPointsAssigned = (data: { ticketId: string; points: number }) =>
+      dispatch({ type: "POINTS_ASSIGNED", ticketId: data.ticketId, points: data.points });
     const onError = (data: { message: string }) => dispatch({ type: "SET_ERROR", message: data.message });
     const onJiraError = (data: { ticketId?: string; message: string }) =>
       dispatch({ type: "SET_JIRA_ERROR", message: data.message });
@@ -320,11 +324,11 @@ export function SessionProvider({ sessionId, participantName, isSpectator, child
     socket.on("voting-reset", onVotingReset);
     socket.on("comment-added", onCommentAdded);
     socket.on("active-ticket-changed", onActiveTicketChanged);
-    socket.on("host-viewing-changed", onHostViewingChanged);
     socket.on("timer-started", onTimerStarted);
     socket.on("timer-stopped", onTimerStopped);
     socket.on("jira-configured", onJiraConfigured);
     socket.on("jira-context-loaded", onJiraContextLoaded);
+    socket.on("points-assigned", onPointsAssigned);
     socket.on("error", onError);
     socket.on("jira-error", onJiraError);
     socket.on("connect", join);
@@ -349,11 +353,11 @@ export function SessionProvider({ sessionId, participantName, isSpectator, child
       socket.off("voting-reset", onVotingReset);
       socket.off("comment-added", onCommentAdded);
       socket.off("active-ticket-changed", onActiveTicketChanged);
-      socket.off("host-viewing-changed", onHostViewingChanged);
       socket.off("timer-started", onTimerStarted);
       socket.off("timer-stopped", onTimerStopped);
       socket.off("jira-configured", onJiraConfigured);
       socket.off("jira-context-loaded", onJiraContextLoaded);
+      socket.off("points-assigned", onPointsAssigned);
       socket.off("error", onError);
       socket.off("jira-error", onJiraError);
       socket.off("connect", join);
@@ -372,24 +376,22 @@ export function SessionProvider({ sessionId, participantName, isSpectator, child
   const currentTicket = state.session?.tickets.find((t) => t.id === state.viewingTicketId) ?? null;
   const amSpectator = state.session?.participants.find((p) => p.id === participantId)?.isSpectator ?? false;
   const isRevealed = currentTicket?.status === "revealed";
-  const myVote: VoteValue | undefined = isRevealed && currentTicket ? currentTicket.votes[participantId] : myLocalVote;
-
-  useEffect(() => {
-    setMyLocalVote(undefined);
-  }, [currentTicket?.id, currentTicket?.round]);
+  const voteKey = currentTicket ? `${currentTicket.id}:${currentTicket.round}` : "";
+  const myVote: VoteValue | undefined =
+    isRevealed && currentTicket ? currentTicket.votes[participantId] : myLocalVotes[voteKey];
 
   const castVote = useCallback(
     (value: VoteValue) => {
       if (!currentTicket || currentTicket.status !== "voting" || amSpectator) return;
       if (myVote === value) {
-        setMyLocalVote(undefined);
+        setMyLocalVotes(({ [voteKey]: _cleared, ...rest }) => rest);
         emit("clear-vote", { ticketId: currentTicket.id });
       } else {
-        setMyLocalVote(value);
+        setMyLocalVotes((votes) => ({ ...votes, [voteKey]: value }));
         emit("submit-vote", { ticketId: currentTicket.id, points: value });
       }
     },
-    [currentTicket, myVote, amSpectator, emit]
+    [currentTicket, voteKey, myVote, amSpectator, emit]
   );
 
   return (

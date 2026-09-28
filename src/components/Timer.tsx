@@ -67,7 +67,7 @@ export function Timer() {
         <div className="relative">
           <button
             onClick={() => setShowPicker(!showPicker)}
-            className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-muted hover:border-primary hover:text-primary transition-colors"
+            className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-muted hover:border-primary hover:text-primary-ink transition-colors"
           >
             ⏱ Timer
           </button>
@@ -77,7 +77,7 @@ export function Timer() {
                 <button
                   key={d}
                   onClick={() => { emit("start-timer", { seconds: d }); setShowPicker(false); }}
-                  className="rounded-md px-3 py-1.5 text-sm text-secondary hover:bg-primary/10 hover:text-primary transition-colors"
+                  className="rounded-md px-3 py-1.5 text-sm text-secondary hover:bg-primary/10 hover:text-primary-ink transition-colors"
                 >
                   {d}s
                 </button>

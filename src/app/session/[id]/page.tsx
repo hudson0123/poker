@@ -40,7 +40,7 @@ function SessionContent() {
         <div className="rounded-2xl bg-surface p-8 shadow-md text-center">
           <h2 className="text-xl font-semibold text-secondary">Oops!</h2>
           <p className="mt-2 text-muted">{error}</p>
-          <a href="/" className="mt-4 inline-block text-primary hover:underline">Back to Home</a>
+          <a href="/" className="mt-4 inline-block text-primary-ink hover:underline">Back to Home</a>
         </div>
       </div>
     );

@@ -10,16 +10,20 @@ import { getSocket } from "@/lib/socket";
 
 export function RevealView() {
   const { currentTicket, session, isHost, emit } = useSession();
-  const [assignedPoints, setAssignedPoints] = useState<number | null>(null);
   const [assigning, setAssigning] = useState(false);
   const [assignError, setAssignError] = useState<string | null>(null);
 
+  // The assigned value itself lives on the ticket (see POINTS_ASSIGNED in
+  // SessionContext); only the in-flight request state is local, and it
+  // belongs to whichever ticket is on screen.
   useEffect(() => {
+    setAssigning(false);
+    setAssignError(null);
+
     const socket = getSocket();
     const onAssigned = ({ ticketId, points, fieldId }: { ticketId: string; points: number; fieldId?: string }) => {
       if (ticketId === currentTicket?.id) {
         console.log(`[jira] assigned ${points} pts via field "${fieldId}"`);
-        setAssignedPoints(points);
         setAssigning(false);
         setAssignError(null);
       }
@@ -46,6 +50,7 @@ export function RevealView() {
   if (!currentTicket || currentTicket.status !== "revealed") return null;
 
   const voters = session?.participants.filter((p) => !p.isSpectator) ?? [];
+  const assignedPoints = currentTicket.assignedPoints ?? null;
   const showJiraAssign = isHost && session?.jiraConnected && currentTicket.jiraKey;
 
   const handleAssign = (points: number) => {
@@ -56,7 +61,7 @@ export function RevealView() {
 
   return (
     <div className="space-y-4">
-      {stats.isConsensus && <Confetti />}
+      {stats.isConsensus && <Confetti seed={`${currentTicket.id}:${currentTicket.round}`} />}
 
       {stats.isConsensus && (
         <motion.div
@@ -88,7 +93,7 @@ export function RevealView() {
                   className={`flex h-24 w-16 items-center justify-center rounded-xl border-2 text-xl font-bold ${
                     isOutlier
                       ? "border-accent bg-accent/5 text-accent"
-                      : "border-primary bg-primary/5 text-primary"
+                      : "border-primary bg-primary/5 text-primary-ink"
                   }`}
                 >
                   {String(vote)}
@@ -124,8 +129,8 @@ export function RevealView() {
                   assignedPoints === pts
                     ? "border-success bg-success/10 text-success"
                     : pts === stats.median
-                      ? "border-primary bg-primary/5 text-primary ring-2 ring-primary/20"
-                      : "border-gray-200 text-secondary hover:border-primary/50 hover:text-primary"
+                      ? "border-primary bg-primary/5 text-primary-ink ring-2 ring-primary/20"
+                      : "border-gray-200 text-secondary hover:border-primary/50 hover:text-primary-ink"
                 }`}
               >
                 {pts}

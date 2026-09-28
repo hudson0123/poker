@@ -1,6 +1,7 @@
 "use client";
 
 import { useSession } from "@/context/SessionContext";
+import { Markdown } from "@/components/Markdown";
 
 export function TicketHeader() {
   const { currentTicket } = useSession();
@@ -21,7 +22,7 @@ export function TicketHeader() {
         <div className="min-w-0">
           <h2 className="text-lg font-semibold text-secondary">
             {currentTicket.jiraKey && (
-              <span className="text-primary">
+              <span className="text-primary-ink">
                 {currentTicket.jiraKey}{displayTitle ? ": " : ""}
               </span>
             )}
@@ -29,9 +30,7 @@ export function TicketHeader() {
           </h2>
           {currentTicket.jiraDescription && (
             <div className="mt-2 max-h-56 overflow-y-auto">
-              <p className="text-sm text-muted whitespace-pre-wrap leading-relaxed">
-                {currentTicket.jiraDescription}
-              </p>
+              <Markdown className="text-sm text-muted leading-relaxed">{currentTicket.jiraDescription}</Markdown>
             </div>
           )}
         </div>
@@ -40,7 +39,7 @@ export function TicketHeader() {
             href={currentTicket.jiraUrl ?? `https://talkiatry.atlassian.net/browse/${currentTicket.jiraKey}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex-shrink-0 rounded-lg bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/20 transition-colors"
+            className="flex-shrink-0 rounded-lg bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary-ink hover:bg-primary/20 transition-colors"
           >
             Open in Jira &rarr;
           </a>
